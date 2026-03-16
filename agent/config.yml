@@ -1,0 +1,52 @@
+inbox: you@example.com
+
+# Emails matching these senders/headers are NEVER replied to, regardless of classification
+blocklist:
+  from_patterns:
+    - "noreply@"
+    - "no-reply@"
+    - "mailer-daemon@"
+    - "list-"
+    - "notifications@"
+    - "alert@"
+  headers:
+    - "List-Unsubscribe"
+    - "Precedence: bulk"
+    - "Precedence: list"
+    - "X-Auto-Response-Suppress"
+
+workflows:
+  - name: "meeting-request"
+    description: "Someone wants to schedule a meeting or call"
+    match:
+      intent: "requesting a meeting, call, or video chat"
+    action:
+      type: "reply"
+      prompt: |
+        You are replying on behalf of Garv. Someone wants to schedule a meeting.
+        Be polite, say you're generally available on weekday afternoons IST,
+        and ask them to share a few time slots.
+        Keep it short and natural — 3-4 sentences max. No corporate fluff.
+        Sign off as "Garv".
+
+  - name: "cold-outreach"
+    description: "Unsolicited sales, recruitment spam, or cold emails"
+    match:
+      intent: "cold outreach, sales pitch, recruitment spam, marketing"
+    action:
+      type: "ignore"
+
+  - name: "action-required"
+    description: "Something that needs Garv's personal attention"
+    match:
+      intent: "requires personal decision, approval, or action from Garv"
+    action:
+      type: "notify"
+      webhook: "${NOTIFY_WEBHOOK_URL}"
+
+  - name: "fallback"
+    description: "Anything that doesn't match above"
+    match:
+      intent: "default"
+    action:
+      type: "ignore"

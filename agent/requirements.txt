@@ -1,0 +1,5 @@
+inotify_simple
+imapclient
+httpx
+pyyaml
+beautifulsoup4
