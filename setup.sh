@@ -45,13 +45,13 @@ if [[ -z "$EMAIL" ]]; then
     read -rp "Mailbox email (e.g. you@example.com): " EMAIL
 fi
 
-if [[ -z "$MAIL_HOST" ]]; then
-    read -rp "Mail hostname (e.g. mail.example.com): " MAIL_HOST
-fi
-
 if [[ -z "$PASSWORD" ]]; then
     read -rsp "Mailbox password: " PASSWORD
     echo ""
+fi
+
+if [[ -z "$MAIL_HOST" ]]; then
+    read -rp "Mail hostname (e.g. mail.example.com): " MAIL_HOST
 fi
 
 if [[ -z "$OPENROUTER_KEY" ]]; then
@@ -103,6 +103,7 @@ echo "      inbox set to $EMAIL"
 # Step 4: Start mailserver and create the first mailbox
 # ---------------------------------------------------------------------------
 echo "[4/5] Creating mailbox and DKIM key..."
+cp mailserver.env.example mailserver.env
 docker compose run --rm mailserver setup email add "$EMAIL" "$PASSWORD"
 echo "      Mailbox created."
 
