@@ -30,7 +30,7 @@ The agent container mounts the mail volume read-only and watches `new/` via inot
 
 ## Production setup
 
-### 1. DNS records
+### DNS records (required before anything else)
 
 | Type | Name | Value |
 |------|------|-------|
@@ -40,17 +40,49 @@ The agent container mounts the mail volume read-only and watches `new/` via inot
 | TXT | `_dmarc.example.com` | `v=DMARC1; p=none; rua=mailto:dmarc@example.com` |
 | PTR | `<your VPS IP>` | `mail.example.com` (set in Hetzner panel) |
 
-DKIM is handled by docker-mailserver — it generates the key; you add the TXT record it outputs.
+DKIM is handled by docker-mailserver — it generates the key; you add the TXT record it outputs after setup.
 
-### 2. Clone and configure
+
+### Option A — Automated setup
+
+`setup.sh` handles everything: config files, mailbox creation, and the first TLS certificate.
 
 ```bash
 git clone <repo> vessel && cd vessel
+cp mailserver.env.example mailserver.env
+./setup.sh
+```
 
-# Mailserver config
-cp mailserver.env.example mailserver.env   # edit as needed
+It will prompt for your email, mail hostname, password, and OpenRouter API key — or pass them as flags:
 
-# Agent config
+```bash
+./setup.sh \
+  --email you@example.com \
+  --host mail.example.com \
+  --password <password> \
+  --openrouter-key sk-or-...
+```
+
+Once it finishes:
+
+1. **Review models** in `agent/.env` — change `CLASSIFY_MODEL` / `REPLY_MODEL` to any model on OpenRouter.
+2. **Configure a relay** in `mailserver.env` if your VPS blocks outbound port 25 (most do):
+   ```
+   DEFAULT_RELAY_HOST=[smtp.mailgun.org]:587
+   RELAY_USER=<user>
+   RELAY_PASSWORD=<password>
+   ```
+   See [relay documentation](https://docker-mailserver.github.io/docker-mailserver/latest/config/environment/#relay-host).
+3. **Start everything** — see [Start everything](#start-everything) below.
+
+
+### Option B — Manual setup
+
+#### 1. Clone and configure
+
+```bash
+git clone <repo> vessel && cd vessel
+cp mailserver.env.example mailserver.env
 cp agent/.env.example agent/.env
 ```
 
@@ -60,15 +92,17 @@ Edit `agent/.env`:
 MAIL_DOMAIN=example.com
 MAIL_USER=you
 MAIL_PASSWORD=<your mailbox password>
+MAIL_HOST=mail.example.com
 OPENROUTER_API_KEY=sk-or-...
-NOTIFY_WEBHOOK_URL=https://hooks.slack.com/...   # optional
 ```
 
-Update hostname in compose.yaml for mailserver
+Update `hostname:` in `compose.yaml` to your mail hostname (e.g. `mail.example.com`).
 
-### 3. Obtain the first TLS certificate
+Update `inbox:` in `agent/config.yml` to your full email address.
 
-Port 80 must be free (certbot uses standalone mode):
+#### 2. Obtain the first TLS certificate
+
+Port 80 must be free (certbot uses standalone HTTP-01 challenge):
 
 ```bash
 CERTBOT_EMAIL=you@example.com DOMAIN=mail.example.com ./scripts/certbot-renew.sh
@@ -76,16 +110,29 @@ CERTBOT_EMAIL=you@example.com DOMAIN=mail.example.com ./scripts/certbot-renew.sh
 
 Certs land in `./docker-data/certbot/certs/`. The `certbot` compose service handles renewals automatically every 12 hours thereafter.
 
-### 4. Create the mailbox
+#### 3. Create the mailbox
 
 ```bash
 docker compose run --rm mailserver setup email add you@example.com <password>
 docker compose run --rm mailserver setup dkim
 ```
 
-Copy the DKIM public key it prints and add it to your DNS as a TXT record.
+Copy the DKIM public key it prints and add it as a TXT record in your DNS.
 
-### 5. Start everything
+#### 4. Configure relay (if needed)
+
+If your VPS blocks outbound port 25, add a relay in `mailserver.env`:
+
+```
+DEFAULT_RELAY_HOST=[smtp.mailgun.org]:587
+RELAY_USER=<user>
+RELAY_PASSWORD=<password>
+```
+
+See [relay documentation](https://docker-mailserver.github.io/docker-mailserver/latest/config/environment/#relay-host).
+
+
+### Start everything
 
 ```bash
 docker compose up -d
@@ -94,11 +141,11 @@ docker compose logs -f mail-agent
 
 Confirm the agent is watching:
 ```
-2025-03-10 12:00:00 INFO Loaded 4 workflows
-2025-03-10 12:00:00 INFO Watching /var/mail/example.com/test/new
+INFO Loaded 4 workflows
+INFO Watching /var/mail/example.com/you/new
 ```
 
-### 6. Edit workflows
+### Edit workflows
 
 Open `agent/config.yml` to adjust intents, reply prompts, or add new workflows. The agent reads the config at startup — `docker compose restart mail-agent` to apply changes.
 
