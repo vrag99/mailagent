@@ -3,14 +3,14 @@ import time
 import httpx
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
-CLASSIFY_MODEL = os.environ.get("CLASSIFY_MODEL", "google/gemini-flash-1.5")
-REPLY_MODEL = os.environ.get("REPLY_MODEL", "anthropic/claude-sonnet-4")
-API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
+_DEFAULT_CLASSIFY_MODEL = "google/gemini-flash-1.5"
+_DEFAULT_REPLY_MODEL = "anthropic/claude-sonnet-4"
 
 
 def _call(system_prompt: str, user_prompt: str, model: str) -> str:
+    api_key = os.environ.get("OPENROUTER_API_KEY", "")
     headers = {
-        "Authorization": f"Bearer {API_KEY}",
+        "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
     }
     payload = {
@@ -43,8 +43,8 @@ def _call(system_prompt: str, user_prompt: str, model: str) -> str:
 
 
 def classify(system_prompt: str, user_prompt: str, model: str | None = None) -> str:
-    return _call(system_prompt, user_prompt, model or CLASSIFY_MODEL)
+    return _call(system_prompt, user_prompt, model or os.environ.get("CLASSIFY_MODEL", _DEFAULT_CLASSIFY_MODEL))
 
 
 def generate_reply(system_prompt: str, user_prompt: str, model: str | None = None) -> str:
-    return _call(system_prompt, user_prompt, model or REPLY_MODEL)
+    return _call(system_prompt, user_prompt, model or os.environ.get("REPLY_MODEL", _DEFAULT_REPLY_MODEL))

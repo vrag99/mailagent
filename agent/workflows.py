@@ -54,7 +54,7 @@ def load_config(path: str = "/app/config.yml") -> Config:
 
 
 def _is_blocked(parsed_email: ParsedEmail, config: Config) -> bool:
-    own_addr = f"{os.environ.get('MAIL_USER', 'hi')}@{os.environ.get('MAIL_DOMAIN', 'garv.me')}"
+    own_addr = f"{os.environ.get('MAIL_USER', '')}@{os.environ.get('MAIL_DOMAIN', '')}"
 
     if parsed_email.from_email == own_addr:
         logger.info("Blocked reply to self: %s", parsed_email.from_email)

@@ -1,3 +1,7 @@
+from dotenv import load_dotenv
+
+load_dotenv()
+
 import logging
 import os
 import time
@@ -107,8 +111,11 @@ def _watch_loop(watch_path: Path, config: workflows.Config) -> None:
 
 
 def main() -> None:
-    mail_domain = os.environ.get("MAIL_DOMAIN", "garv.me")
-    mail_user = os.environ.get("MAIL_USER", "hi")
+    mail_domain = os.environ.get("MAIL_DOMAIN", "")
+    mail_user = os.environ.get("MAIL_USER", "")
+    if not mail_domain or not mail_user:
+        logger.error("MAIL_DOMAIN and MAIL_USER must be set")
+        raise SystemExit(1)
     watch_path = Path(f"/var/mail/{mail_domain}/{mail_user}/new")
 
     if not watch_path.exists():
