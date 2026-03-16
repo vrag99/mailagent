@@ -3,7 +3,7 @@ services:
     image: ghcr.io/docker-mailserver/docker-mailserver:latest
     container_name: mailserver
     # Provide the FQDN of your mail server here (Your DNS MX record should point to this value)
-    hostname: mail.garv.me
+    hostname: mail.example.com
     env_file: mailserver.env
     # More information about the mail-server ports:
     # https://docker-mailserver.github.io/docker-mailserver/latest/config/security/understanding-the-ports/
@@ -46,4 +46,17 @@ services:
         certbot renew --standalone --quiet --preferred-challenges http;
         sleep 43200 & wait $${!};
       done"
+    restart: unless-stopped
+
+  mail-agent:
+    build: ./agent
+    container_name: mail-agent
+    env_file: ./agent/.env
+    volumes:
+      - ./docker-data/dms/mail-data/:/var/mail/:ro
+      - ./agent/config.yml:/app/config.yml:ro
+      - ./docker-data/agent/:/app/data/
+    depends_on:
+      mailserver:
+        condition: service_healthy
     restart: unless-stopped
