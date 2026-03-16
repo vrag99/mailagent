@@ -1,1 +1,4 @@
 *.env
+docker-data/
+.venv/
+__pycache__/
