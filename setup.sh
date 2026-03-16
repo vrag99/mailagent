@@ -85,11 +85,11 @@ echo "      hostname set to $MAIL_HOST"
 # ---------------------------------------------------------------------------
 echo "[2/5] Writing agent/.env..."
 cp agent/.env.example agent/.env
-sed -i "s|^MAIL_DOMAIN=.*|MAIL_DOMAIN=$MAIL_DOMAIN|" agent/.env
-sed -i "s|^MAIL_USER=.*|MAIL_USER=$MAIL_USER|" agent/.env
-sed -i "s|^MAIL_PASSWORD=.*|MAIL_PASSWORD=$PASSWORD|" agent/.env
-sed -i "s|^MAIL_HOST=.*|MAIL_HOST=$MAIL_HOST|" agent/.env
-sed -i "s|^OPENROUTER_API_KEY=.*|OPENROUTER_API_KEY=$OPENROUTER_KEY|" agent/.env
+sed -i "s|^MAIL_DOMAIN=.*|MAIL_DOMAIN=\"$MAIL_DOMAIN\"|" agent/.env
+sed -i "s|^MAIL_USER=.*|MAIL_USER=\"$MAIL_USER\"|" agent/.env
+sed -i "s|^MAIL_PASSWORD=.*|MAIL_PASSWORD=\"$PASSWORD\"|" agent/.env
+sed -i "s|^MAIL_HOST=.*|MAIL_HOST=\"$MAIL_HOST\"|" agent/.env
+sed -i "s|^OPENROUTER_API_KEY=.*|OPENROUTER_API_KEY=\"$OPENROUTER_KEY\"|" agent/.env
 echo "      agent/.env written"
 
 # ---------------------------------------------------------------------------
@@ -102,13 +102,10 @@ echo "      inbox set to $EMAIL"
 # ---------------------------------------------------------------------------
 # Step 4: Start mailserver and create the first mailbox
 # ---------------------------------------------------------------------------
-echo "[4/5] Creating mailbox and DKIM key..."
+echo "[4/5] Creating mailbox"
 cp mailserver.env.example mailserver.env
 docker compose run --rm mailserver setup email add "$EMAIL" "$PASSWORD"
 echo "      Mailbox created."
-
-docker compose run --rm mailserver setup dkim
-echo "      DKIM key generated — add the printed TXT record to your DNS."
 
 # ---------------------------------------------------------------------------
 # Step 5: Obtain TLS certificate

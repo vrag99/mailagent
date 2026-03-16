@@ -114,10 +114,7 @@ Certs land in `./docker-data/certbot/certs/`. The `certbot` compose service hand
 
 ```bash
 docker compose run --rm mailserver setup email add you@example.com <password>
-docker compose run --rm mailserver setup dkim
 ```
-
-Copy the DKIM public key it prints and add it as a TXT record in your DNS.
 
 #### 4. Configure relay (if needed)
 
