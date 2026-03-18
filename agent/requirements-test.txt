@@ -1,6 +1,0 @@
-imapclient
-httpx
-pyyaml
-beautifulsoup4
-python-dotenv
-pytest

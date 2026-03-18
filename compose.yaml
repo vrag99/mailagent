@@ -48,14 +48,14 @@ services:
       done"
     restart: unless-stopped
 
-  mail-agent:
-    build: ./agent
-    container_name: mail-agent
-    env_file: ./agent/.env
+  mailagent:
+    image: ghcr.io/vrag99/mailagent:latest
+    container_name: mailagent
+    env_file: mailagent.env
     volumes:
       - ./docker-data/dms/mail-data/:/var/mail/:ro
-      - ./agent/config.yml:/app/config.yml:ro
-      - ./docker-data/agent/:/app/data/
+      - ./mailagent.yml:/app/config.yml:ro
+      - ./mailagent-data/:/app/data/
     depends_on:
       mailserver:
         condition: service_healthy

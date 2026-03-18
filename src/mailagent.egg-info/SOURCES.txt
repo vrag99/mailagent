@@ -7,6 +7,7 @@ src/mailagent/config.py
 src/mailagent/mailer.py
 src/mailagent/parser.py
 src/mailagent/schema.json
+src/mailagent/setup_wizard.py
 src/mailagent/state.py
 src/mailagent/watcher.py
 src/mailagent/workflows.py
@@ -22,6 +23,12 @@ src/mailagent/providers/gemini.py
 src/mailagent/providers/groq.py
 src/mailagent/providers/openai.py
 src/mailagent/providers/openrouter.py
+src/mailagent/testing/__init__.py
+src/mailagent/testing/generator.py
+src/mailagent/testing/inbucket.py
+src/mailagent/testing/reporter.py
+src/mailagent/testing/runner.py
+src/mailagent/testing/webhook_capture.py
 src/mailagent/utils/__init__.py
 src/mailagent/utils/env.py
 src/mailagent/utils/logging.py

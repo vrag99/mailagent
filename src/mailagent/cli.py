@@ -9,6 +9,8 @@ import sys
 import time
 from pathlib import Path
 
+from rich.console import Console
+
 from .classifier import classify
 from .config import ConfigError, load_config, schema_text
 from .parser import parse
@@ -17,6 +19,7 @@ from .workflows import execute
 from .utils.logging import setup_logging
 
 logger = logging.getLogger(__name__)
+console = Console()
 
 DEFAULT_CONFIG = os.environ.get("MAILAGENT_CONFIG", "/app/config.yml")
 
@@ -43,7 +46,7 @@ def main(argv: list[str] | None = None) -> int:
             eml_path = getattr(args, "eml_path", None)
             if eml_path:
                 return _cmd_test_eml(Path(eml_path), config_path, verbose)
-            print("Usage: mailagent test {dry|live|quick} [options]", file=sys.stderr)
+            Console(stderr=True).print("[red]Usage:[/] mailagent test {dry|live|quick} [options]")
             return 2
         if subcommand == "dry":
             return _cmd_test_dry(args)
@@ -53,6 +56,10 @@ def main(argv: list[str] | None = None) -> int:
             return _cmd_test_quick(args)
         # Fallback: treat subcommand as eml path for backwards compat
         return _cmd_test_eml(Path(subcommand), config_path, verbose)
+
+    if command == "setup":
+        from .setup_wizard import run_setup
+        return run_setup(output_dir=getattr(args, "output_dir", "."))
 
     if command == "run":
         return _cmd_run(config_path, verbose)
@@ -138,14 +145,21 @@ def _build_parser() -> argparse.ArgumentParser:
         "schema", parents=[common], help="Print JSON Schema to stdout"
     )
 
+    # mailagent setup
+    setup_parser = subparsers.add_parser("setup", help="Interactive setup wizard")
+    setup_parser.add_argument(
+        "-o", "--output-dir", default=".", help="Output directory"
+    )
+
     return parser
 
 
 def _cmd_run(config_path: str, verbose: bool) -> int:
+    err = Console(stderr=True)
     try:
         load_result = load_config(config_path)
     except ConfigError as exc:
-        print(f"Config validation failed:\n{exc}", file=sys.stderr)
+        err.print(f"[red]Config validation failed:[/]\n{exc}")
         return 1
 
     setup_logging(
@@ -169,36 +183,38 @@ def _cmd_run(config_path: str, verbose: bool) -> int:
 
 
 def _cmd_validate(config_path: str, verbose: bool) -> int:
+    err = Console(stderr=True)
     try:
         load_result = load_config(config_path)
     except ConfigError as exc:
-        print(f"Config validation failed:\n{exc}", file=sys.stderr)
+        err.print(f"[red]Config validation failed:[/]\n{exc}")
         return 1
 
     config = load_result.config
     setup_logging(verbose=verbose, level=config.settings.log_level)
     for warning in load_result.warnings:
-        print(f"Warning: {warning}")
+        console.print(f"[yellow]Warning:[/] {warning}")
 
     for inbox in config.inboxes:
         watch_path = maildir_new_path(inbox.address)
         if not watch_path.exists():
-            print(f"Warning: maildir does not exist for {inbox.address}: {watch_path}")
+            console.print(f"[yellow]Warning:[/] maildir does not exist for {inbox.address}: {watch_path}")
 
-    print("Config is valid")
+    console.print("[green]Config is valid[/]")
     return 0
 
 
 def _cmd_test_eml(eml_path: Path, config_path: str, verbose: bool) -> int:
     """Legacy: dry-run a single .eml file through the pipeline."""
+    err = Console(stderr=True)
     if not eml_path.exists():
-        print(f"Input file not found: {eml_path}", file=sys.stderr)
+        err.print(f"[red]Input file not found:[/] {eml_path}")
         return 1
 
     try:
         load_result = load_config(config_path)
     except ConfigError as exc:
-        print(f"Config validation failed:\n{exc}", file=sys.stderr)
+        err.print(f"[red]Config validation failed:[/]\n{exc}")
         return 1
 
     config = load_result.config
@@ -207,7 +223,7 @@ def _cmd_test_eml(eml_path: Path, config_path: str, verbose: bool) -> int:
     inbox = _select_inbox(config, parsed.to_addr)
 
     if inbox is None:
-        print("No inboxes configured", file=sys.stderr)
+        err.print("[red]No inboxes configured[/]")
         return 1
 
     classify_provider = build_provider(config, inbox.classify_provider)
@@ -229,21 +245,21 @@ def _cmd_test_eml(eml_path: Path, config_path: str, verbose: bool) -> int:
         dry_run=True,
     )
 
-    print("Parsed email")
-    print(f"  file: {parsed.filepath}")
-    print(f"  from: {parsed.from_addr}")
-    print(f"  to: {parsed.to_addr}")
-    print(f"  subject: {parsed.subject}")
-    print()
-    print("Classification")
-    print(f"  inbox: {inbox.address}")
-    print(f"  workflow: {result.workflow_name}")
-    print(f"  method: {result.method}")
+    console.print("[bold]Parsed email[/]")
+    console.print(f"  file: {parsed.filepath}")
+    console.print(f"  from: {parsed.from_addr}")
+    console.print(f"  to: {parsed.to_addr}")
+    console.print(f"  subject: {parsed.subject}")
+    console.print()
+    console.print("[bold]Classification[/]")
+    console.print(f"  inbox: {inbox.address}")
+    console.print(f"  workflow: [cyan]{result.workflow_name}[/]")
+    console.print(f"  method: {result.method}")
     if result.confidence is not None:
-        print(f"  confidence: {result.confidence}")
-    print()
-    print("Action preview")
-    print(json.dumps(action_preview, indent=2, sort_keys=True))
+        console.print(f"  confidence: {result.confidence}")
+    console.print()
+    console.print("[bold]Action preview[/]")
+    console.print(json.dumps(action_preview, indent=2, sort_keys=True))
 
     return 0
 
@@ -258,7 +274,7 @@ def _cmd_test_dry(args: argparse.Namespace) -> int:
     try:
         test_config = load_test_config(args.tests)
     except (FileNotFoundError, ValueError) as exc:
-        print(f"Error loading test file: {exc}", file=sys.stderr)
+        Console(stderr=True).print(f"[red]Error loading test file:[/] {exc}")
         return 1
 
     resolved_config = test_config.config_path
@@ -274,7 +290,7 @@ def _cmd_test_dry(args: argparse.Namespace) -> int:
             verbose=verbose,
         )
     except ConfigError as exc:
-        print(f"Config validation failed:\n{exc}", file=sys.stderr)
+        Console(stderr=True).print(f"[red]Config validation failed:[/]\n{exc}")
         return 1
 
 
@@ -288,7 +304,7 @@ def _cmd_test_live(args: argparse.Namespace) -> int:
     try:
         test_config = load_test_config(args.tests)
     except (FileNotFoundError, ValueError) as exc:
-        print(f"Error loading test file: {exc}", file=sys.stderr)
+        Console(stderr=True).print(f"[red]Error loading test file:[/] {exc}")
         return 1
 
     resolved_config = test_config.config_path
@@ -306,7 +322,7 @@ def _cmd_test_live(args: argparse.Namespace) -> int:
             verbose=verbose,
         )
     except ConfigError as exc:
-        print(f"Config validation failed:\n{exc}", file=sys.stderr)
+        Console(stderr=True).print(f"[red]Config validation failed:[/]\n{exc}")
         return 1
 
 
@@ -333,7 +349,7 @@ def _cmd_test_quick(args: argparse.Namespace) -> int:
             verbose=verbose,
         )
     except ConfigError as exc:
-        print(f"Config validation failed:\n{exc}", file=sys.stderr)
+        Console(stderr=True).print(f"[red]Config validation failed:[/]\n{exc}")
         return 1
 
 
