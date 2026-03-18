@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 class ClassificationResult:
     workflow_name: str
     method: str
-    confidence: str | None = None
+    confidence: float | None = None
 
 
 def classify(
@@ -35,7 +35,7 @@ def classify(
     try:
         result = _classify_llm(email, workflows, provider, system_prompt)
         if result:
-            return ClassificationResult(workflow_name=result, method="llm")
+            return result
     except ProviderError as exc:
         logger.warning("LLM classification failed: %s. Falling back to keywords.", exc)
 
@@ -51,7 +51,7 @@ def _classify_llm(
     workflows: list[Workflow],
     provider: BaseProvider,
     system_prompt: str,
-) -> str | None:
+) -> ClassificationResult | None:
     candidates = [wf for wf in workflows if wf.match.intent.lower() != "default"]
     if not candidates:
         return None
@@ -62,7 +62,8 @@ def _classify_llm(
     classify_system = (
         f"{system_prompt}\n\n"
         "You classify incoming emails into exactly one workflow name.\n"
-        'Return ONLY JSON in this exact form: {"workflow": "<name>"}.\n'
+        'Return ONLY JSON in this exact form: {"workflow": "<name>", "confidence": 0.85}.\n'
+        "confidence is a float between 0.0 and 1.0 (up to 2 decimal places) reflecting how well the email fits the chosen workflow.\n"
         "Do not add markdown or explanation."
     )
     classify_user = (
@@ -76,32 +77,46 @@ def _classify_llm(
     )
 
     raw = provider.classify(classify_system, classify_user)
-    parsed = _parse_llm_workflow(raw)
-    if parsed is None:
+    workflow_name, confidence = _parse_llm_response(raw)
+    if workflow_name is None:
         return None
 
     for name in allowed:
-        if name == parsed or name.lower() == parsed.lower():
-            return name
+        if name == workflow_name or name.lower() == workflow_name.lower():
+            return ClassificationResult(workflow_name=name, method="llm", confidence=confidence)
 
-    logger.warning("LLM returned unknown workflow %r; falling back.", parsed)
+    logger.warning("LLM returned unknown workflow %r; falling back.", workflow_name)
     return None
 
 
-def _parse_llm_workflow(raw: str) -> str | None:
+def _parse_llm_response(raw: str) -> tuple[str | None, float | None]:
+    """Parse LLM classification response. Returns (workflow_name, confidence)."""
     text = raw.strip()
     if not text:
-        return None
+        return None, None
 
     try:
         data = json.loads(text)
     except json.JSONDecodeError:
-        return text
+        return text, None
 
-    workflow = data.get("workflow") if isinstance(data, dict) else None
+    if not isinstance(data, dict):
+        return None, None
+
+    workflow = data.get("workflow")
     if not isinstance(workflow, str):
-        return None
-    return workflow.strip()
+        return None, None
+
+    raw_conf = data.get("confidence")
+    confidence: float | None = None
+    try:
+        val = float(raw_conf)  # type: ignore[arg-type]
+        if 0.0 <= val <= 1.0:
+            confidence = round(val, 2)
+    except (TypeError, ValueError):
+        pass
+
+    return workflow.strip(), confidence
 
 
 def _classify_keywords(email: ParsedEmail, workflows: list[Workflow]) -> str | None:

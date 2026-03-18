@@ -25,6 +25,7 @@ services:
 
   mailagent:
     image: ghcr.io/vrag99/mailagent:latest
+    env_file: ./mailagent.env
     volumes:
       - ./docker-data/dms/mail-data/:/var/mail/:ro
       - ./mailagent.yml:/app/config.yml:ro
@@ -37,9 +38,19 @@ services:
 
 Then:
 
-1. Copy `examples/mailagent.minimal.yml` to `mailagent.yml`
-2. Set env vars for provider keys and mailbox passwords
-3. Start stack and check logs
+1. Copy `examples/mailagent.minimal.yml` to `mailagent.yml` and configure your inboxes and workflows.
+2. Create a `mailagent.env` file with the secrets referenced in your config:
+   ```env
+   GROQ_API_KEY=gsk_...
+   ANTHROPIC_API_KEY=sk-ant-...
+   MAIL_PASSWORD=your-mailbox-password
+   # Add any other ${VAR} values used in mailagent.yml
+   ```
+3. Start the stack and check logs:
+   ```bash
+   docker compose up -d
+   docker compose logs -f mailagent
+   ```
 
 ## CLI
 

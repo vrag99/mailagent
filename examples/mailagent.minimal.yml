@@ -26,6 +26,7 @@ defaults:
 
 inboxes:
   - address: you@example.com
+    name: Jane Doe
     credentials:
       password: ${MAIL_PASSWORD}
     workflows:

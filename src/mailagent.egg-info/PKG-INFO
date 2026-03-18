@@ -1,7 +1,20 @@
 Metadata-Version: 2.4
 Name: mailagent
-Version: 0.2.0
-Summary: General-purpose agentic inbox for docker-mailserver
+Version: 0.1.0
+Summary: Your inbox, on autopilot.
+Author: vrag99
+License-Expression: MIT
+Project-URL: Homepage, https://github.com/vrag99/mailagent
+Project-URL: Repository, https://github.com/vrag99/mailagent
+Project-URL: Issues, https://github.com/vrag99/mailagent/issues
+Classifier: Development Status :: 4 - Beta
+Classifier: Environment :: Console
+Classifier: Intended Audience :: System Administrators
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Topic :: Communications :: Email
 Requires-Python: >=3.11
 Description-Content-Type: text/markdown
 Requires-Dist: beautifulsoup4>=4.12.0
@@ -10,8 +23,12 @@ Requires-Dist: imapclient>=3.0.0
 Requires-Dist: inotify_simple>=2.0.0; sys_platform == "linux"
 Requires-Dist: jsonschema>=4.23.0
 Requires-Dist: pyyaml>=6.0.0
+Requires-Dist: questionary>=2.0.0
+Requires-Dist: rich>=13.0.0
 Provides-Extra: dev
 Requires-Dist: pytest>=8.0.0; extra == "dev"
+Provides-Extra: test
+Requires-Dist: docker>=7.0.0; extra == "test"
 
 # mailagent
 
@@ -39,7 +56,8 @@ services:
     # ... your existing config
 
   mailagent:
-    image: mailagent/mailagent:latest
+    image: ghcr.io/vrag99/mailagent:latest
+    env_file: ./mailagent.env
     volumes:
       - ./docker-data/dms/mail-data/:/var/mail/:ro
       - ./mailagent.yml:/app/config.yml:ro
@@ -52,9 +70,19 @@ services:
 
 Then:
 
-1. Copy `examples/mailagent.minimal.yml` to `mailagent.yml`
-2. Set env vars for provider keys and mailbox passwords
-3. Start stack and check logs
+1. Copy `examples/mailagent.minimal.yml` to `mailagent.yml` and configure your inboxes and workflows.
+2. Create a `mailagent.env` file with the secrets referenced in your config:
+   ```env
+   GROQ_API_KEY=gsk_...
+   ANTHROPIC_API_KEY=sk-ant-...
+   MAIL_PASSWORD=your-mailbox-password
+   # Add any other ${VAR} values used in mailagent.yml
+   ```
+3. Start the stack and check logs:
+   ```bash
+   docker compose up -d
+   docker compose logs -f mailagent
+   ```
 
 ## CLI
 
@@ -110,7 +138,7 @@ Default schema file is at repo root: `schema.json`.
 In YAML files:
 
 ```yaml
-# yaml-language-server: $schema=https://raw.githubusercontent.com/mailagent/mailagent/main/schema.json
+# yaml-language-server: $schema=https://raw.githubusercontent.com/vrag99/mailagent/main/schema.json
 ```
 
 VS Code mapping:
@@ -118,7 +146,7 @@ VS Code mapping:
 ```json
 {
   "yaml.schemas": {
-    "https://raw.githubusercontent.com/mailagent/mailagent/main/schema.json": "mailagent.yml"
+    "https://raw.githubusercontent.com/vrag99/mailagent/main/schema.json": "mailagent.yml"
   }
 }
 ```

@@ -155,6 +155,7 @@ def _perform_reply(
             mail_host=mail_host,
             inbox_address=inbox.address,
             password=password,
+            inbox_name=inbox.name,
         )
         mailer.save_and_flag_replied(
             reply_msg=reply_msg,

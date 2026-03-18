@@ -3,11 +3,23 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "mailagent"
+name = "docker-mailagent"
 version = "0.1.0"
 description = "Your inbox, on autopilot."
 readme = "README.md"
 requires-python = ">=3.11"
+license = "MIT"
+authors = [{ name = "vrag99" }]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Environment :: Console",
+  "Intended Audience :: System Administrators",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Communications :: Email",
+]
 dependencies = [
   "beautifulsoup4>=4.12.0",
   "httpx>=0.27.0",
@@ -15,6 +27,8 @@ dependencies = [
   "inotify_simple>=2.0.0; sys_platform == 'linux'",
   "jsonschema>=4.23.0",
   "pyyaml>=6.0.0",
+  "questionary>=2.0.0",
+  "rich>=13.0.0",
 ]
 
 [project.optional-dependencies]
@@ -23,6 +37,11 @@ test = ["docker>=7.0.0"]
 
 [project.scripts]
 mailagent = "mailagent.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/vrag99/mailagent"
+Repository = "https://github.com/vrag99/mailagent"
+Issues = "https://github.com/vrag99/mailagent/issues"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
