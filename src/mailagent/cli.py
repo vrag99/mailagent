@@ -71,7 +71,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
 
     parser = argparse.ArgumentParser(
-        prog="mailagent", description="General-purpose agentic inbox"
+        prog="mailagent", description="Your inbox, on autopilot."
     )
     subparsers = parser.add_subparsers(dest="command")
 

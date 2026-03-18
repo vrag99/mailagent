@@ -13,7 +13,7 @@ services:
       - inbucket-data:/storage
 
   mailagent-test:
-    image: mailagent/mailagent:latest
+    image: ghcr.io/vrag99/mailagent:latest
     command: test live --inbucket-url http://inbucket:9000
     volumes:
       - ./mailagent.yml:/app/config.yml:ro

@@ -25,7 +25,7 @@ services:
       retries: 0
 
   mailagent:
-    image: mailagent/mailagent:latest
+    image: ghcr.io/vrag99/mailagent:latest
     container_name: mailagent
     env_file: ./mailagent.env
     volumes:

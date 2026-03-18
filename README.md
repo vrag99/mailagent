@@ -24,7 +24,7 @@ services:
     # ... your existing config
 
   mailagent:
-    image: mailagent/mailagent:latest
+    image: ghcr.io/vrag99/mailagent:latest
     volumes:
       - ./docker-data/dms/mail-data/:/var/mail/:ro
       - ./mailagent.yml:/app/config.yml:ro
@@ -95,7 +95,7 @@ Default schema file is at repo root: `schema.json`.
 In YAML files:
 
 ```yaml
-# yaml-language-server: $schema=https://raw.githubusercontent.com/mailagent/mailagent/main/schema.json
+# yaml-language-server: $schema=https://raw.githubusercontent.com/vrag99/mailagent/main/schema.json
 ```
 
 VS Code mapping:
@@ -103,7 +103,7 @@ VS Code mapping:
 ```json
 {
   "yaml.schemas": {
-    "https://raw.githubusercontent.com/mailagent/mailagent/main/schema.json": "mailagent.yml"
+    "https://raw.githubusercontent.com/vrag99/mailagent/main/schema.json": "mailagent.yml"
   }
 }
 ```

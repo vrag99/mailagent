@@ -1,4 +1,4 @@
-# yaml-language-server: $schema=https://raw.githubusercontent.com/mailagent/mailagent/main/schema.json
+# yaml-language-server: $schema=https://raw.githubusercontent.com/vrag99/mailagent/main/schema.json
 
 providers:
   fast:
