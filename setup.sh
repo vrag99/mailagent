@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# setup.sh — first-time setup for vessel
+# setup.sh — first-time setup for mailagent
 #
 # Usage:
 #   ./setup.sh                                                      # fully interactive
@@ -70,7 +70,7 @@ MAIL_USER="${EMAIL%%@*}"
 MAIL_DOMAIN="${EMAIL##*@}"
 
 echo ""
-echo "==> Setting up vessel for $EMAIL on $MAIL_HOST"
+echo "==> Setting up mailagent for $EMAIL on $MAIL_HOST"
 echo ""
 
 # ---------------------------------------------------------------------------

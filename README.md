@@ -1,4 +1,4 @@
-# vessel
+# mailagent
 
 Self-hosted email server with an AI sidecar agent that watches your inbox, classifies emails via LLM, and executes workflows (auto-reply, notify, ignore).
 
@@ -48,7 +48,7 @@ DKIM is handled by docker-mailserver — it generates the key; you add the TXT r
 `setup.sh` handles everything: config files, mailbox creation, and the first TLS certificate.
 
 ```bash
-git clone <repo> vessel && cd vessel
+git clone <repo> mailagent && cd mailagent
 cp mailserver.env.example mailserver.env
 ./setup.sh
 ```
@@ -81,7 +81,7 @@ Once it finishes:
 #### 1. Clone and configure
 
 ```bash
-git clone <repo> vessel && cd vessel
+git clone <repo> mailagent && cd mailagent
 cp mailserver.env.example mailserver.env
 cp agent/.env.example agent/.env
 ```
