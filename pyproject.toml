@@ -19,6 +19,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0.0"]
+test = ["docker>=7.0.0"]
 
 [project.scripts]
 mailagent = "mailagent.cli:main"
@@ -30,4 +31,4 @@ package-dir = {"" = "src"}
 where = ["src"]
 
 [tool.setuptools.package-data]
-mailagent = ["schema.json"]
+mailagent = ["schema.json", "schema.test.json"]

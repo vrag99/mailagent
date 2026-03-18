@@ -1,0 +1,67 @@
+# yaml-language-server: $schema=../schema.test.json
+
+# Which mailagent config to test against
+config: ./mailagent.yml
+
+# Provider used to generate test emails from descriptions
+generator:
+  provider: fast
+
+# Target inbox to test
+inbox: hi@garv.me
+
+tests:
+  # ── Generate from description ──
+
+  - name: "recruiter-cold-email"
+    generate:
+      description: "A tech recruiter reaching out about a senior engineer role. Includes buzzwords like 'exciting opportunity' and 'competitive compensation'."
+      from: "jessica.t@talentforge.io"
+    expect:
+      workflow: cold-outreach
+      action: ignore
+
+  - name: "meeting-request-casual"
+    generate:
+      description: "A friend asking to catch up over coffee next week. Casual tone."
+    expect:
+      workflow: meeting-request
+      action: reply
+
+  # ── Explicit email content ──
+
+  - name: "newsletter-unsubscribe"
+    email:
+      from: "digest@techcrunch.com"
+      subject: "Your Weekly TechCrunch Digest"
+      body: |
+        Here are this week's top stories in tech...
+        1. Apple announces new M5 chip
+        2. OpenAI raises another $10B
+        To unsubscribe, click here.
+      headers:
+        List-Unsubscribe: "<mailto:unsub@techcrunch.com>"
+        Precedence: bulk
+    expect:
+      workflow: cold-outreach
+      action: ignore
+      blocked: true
+
+  - name: "spam-disguised-as-meeting"
+    email:
+      from: "sales@crmsolutions.biz"
+      subject: "Let's schedule a quick demo"
+      body: "Hi, I'd love to show you how our CRM can 10x your pipeline. Book a free 15-min demo."
+    expect:
+      workflow: cold-outreach
+      action: ignore
+
+  # ── Batch generation ──
+
+  - name: "batch-cold-outreach"
+    generate_batch:
+      description: "Various cold outreach and sales emails — SaaS pitches, recruitment, partnership requests"
+      count: 3
+    expect:
+      workflow: cold-outreach
+      action: ignore

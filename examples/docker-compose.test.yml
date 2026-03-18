@@ -1,0 +1,27 @@
+services:
+  inbucket:
+    image: inbucket/inbucket
+    container_name: mailagent-test-inbucket
+    ports:
+      - "2500:2500"   # SMTP
+      - "1100:1100"   # IMAP
+      - "9000:9000"   # Web UI
+    environment:
+      - INBUCKET_STORAGE_TYPE=file
+      - INBUCKET_STORAGE_PARAMS=/storage
+    volumes:
+      - inbucket-data:/storage
+
+  mailagent-test:
+    image: mailagent/mailagent:latest
+    command: test live --inbucket-url http://inbucket:9000
+    volumes:
+      - ./mailagent.yml:/app/config.yml:ro
+      - ./mailagent.test.yml:/app/tests.yml:ro
+      - inbucket-data:/var/mail/:ro
+    depends_on:
+      - inbucket
+    env_file: ./mailagent.env
+
+volumes:
+  inbucket-data:

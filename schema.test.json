@@ -1,0 +1,146 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "mailagent-test-config",
+  "title": "mailagent test configuration",
+  "description": "Schema for mailagent.test.yml — defines test cases for email workflow validation",
+  "type": "object",
+  "required": ["tests"],
+  "additionalProperties": false,
+  "properties": {
+    "config": {
+      "type": "string",
+      "description": "Path to the mailagent.yml config file to test against",
+      "default": "./mailagent.yml"
+    },
+    "generator": {
+      "description": "Provider used to generate test emails from descriptions",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["provider"],
+          "additionalProperties": false,
+          "properties": {
+            "provider": {
+              "type": "string",
+              "description": "Name of a provider defined in mailagent.yml"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["type", "model", "api_key"],
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": ["openai", "anthropic", "gemini", "openrouter", "groq"]
+            },
+            "model": { "type": "string" },
+            "api_key": { "type": "string" },
+            "base_url": { "type": "string" },
+            "timeout": { "type": "integer", "minimum": 1 },
+            "retries": { "type": "integer", "minimum": 0 }
+          }
+        }
+      ]
+    },
+    "inbox": {
+      "type": "string",
+      "description": "Target inbox address to test (must exist in mailagent.yml)",
+      "format": "email"
+    },
+    "tests": {
+      "type": "array",
+      "description": "List of test cases",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["name"],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Unique test case name"
+          },
+          "generate": {
+            "type": "object",
+            "description": "Generate a test email from a description using an LLM",
+            "required": ["description"],
+            "additionalProperties": false,
+            "properties": {
+              "description": {
+                "type": "string",
+                "description": "Description of the email to generate"
+              },
+              "from": {
+                "type": "string",
+                "description": "Override the sender address"
+              }
+            }
+          },
+          "generate_batch": {
+            "type": "object",
+            "description": "Generate multiple test emails from a description",
+            "required": ["description"],
+            "additionalProperties": false,
+            "properties": {
+              "description": {
+                "type": "string",
+                "description": "Description of the email category to generate"
+              },
+              "count": {
+                "type": "integer",
+                "description": "Number of emails to generate",
+                "minimum": 1,
+                "maximum": 20,
+                "default": 5
+              }
+            }
+          },
+          "email": {
+            "type": "object",
+            "description": "Provide explicit email content",
+            "required": ["from", "subject"],
+            "additionalProperties": false,
+            "properties": {
+              "from": { "type": "string" },
+              "subject": { "type": "string" },
+              "body": { "type": "string", "default": "" },
+              "headers": {
+                "type": "object",
+                "description": "Additional email headers",
+                "additionalProperties": { "type": "string" }
+              }
+            }
+          },
+          "expect": {
+            "type": "object",
+            "description": "Expected classification result",
+            "additionalProperties": false,
+            "properties": {
+              "workflow": {
+                "type": "string",
+                "description": "Expected workflow name"
+              },
+              "action": {
+                "type": "string",
+                "description": "Expected action type",
+                "enum": ["reply", "ignore", "webhook", "notify"]
+              },
+              "blocked": {
+                "type": "boolean",
+                "description": "Whether the email should be blocked by the blocklist",
+                "default": false
+              }
+            }
+          }
+        },
+        "oneOf": [
+          { "required": ["generate"] },
+          { "required": ["generate_batch"] },
+          { "required": ["email"] }
+        ]
+      }
+    }
+  }
+}

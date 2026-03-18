@@ -37,7 +37,22 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_validate(config_path, verbose)
 
     if command == "test":
-        return _cmd_test(Path(args.eml_path), config_path, verbose)
+        subcommand = getattr(args, "test_command", None)
+        if subcommand is None:
+            # Legacy: mailagent test <eml_path>
+            eml_path = getattr(args, "eml_path", None)
+            if eml_path:
+                return _cmd_test_eml(Path(eml_path), config_path, verbose)
+            print("Usage: mailagent test {dry|live|quick} [options]", file=sys.stderr)
+            return 2
+        if subcommand == "dry":
+            return _cmd_test_dry(args)
+        if subcommand == "live":
+            return _cmd_test_live(args)
+        if subcommand == "quick":
+            return _cmd_test_quick(args)
+        # Fallback: treat subcommand as eml path for backwards compat
+        return _cmd_test_eml(Path(subcommand), config_path, verbose)
 
     if command == "run":
         return _cmd_run(config_path, verbose)
@@ -65,10 +80,59 @@ def _build_parser() -> argparse.ArgumentParser:
         "validate", parents=[common], help="Validate the config file and exit"
     )
 
+    # ── test command with subcommands ──
     test_parser = subparsers.add_parser(
-        "test", parents=[common], help="Dry-run a .eml file"
+        "test", parents=[common], help="Test email workflows"
     )
-    test_parser.add_argument("eml_path", help="Path to .eml file")
+    test_sub = test_parser.add_subparsers(dest="test_command")
+
+    # mailagent test dry
+    dry_parser = test_sub.add_parser("dry", parents=[common], help="Dry-run tests (classification only)")
+    dry_parser.add_argument(
+        "-t", "--tests", default="./mailagent.test.yml", help="Test file path"
+    )
+    dry_parser.add_argument(
+        "-f", "--filter", dest="filter_name", default=None,
+        help="Run only tests matching this name (substring)",
+    )
+    dry_parser.add_argument(
+        "--no-generate", action="store_true",
+        help="Skip generate/generate_batch tests",
+    )
+
+    # mailagent test live
+    live_parser = test_sub.add_parser("live", parents=[common], help="Full end-to-end tests via Inbucket")
+    live_parser.add_argument(
+        "-t", "--tests", default="./mailagent.test.yml", help="Test file path"
+    )
+    live_parser.add_argument(
+        "-f", "--filter", dest="filter_name", default=None,
+        help="Run only tests matching this name",
+    )
+    live_parser.add_argument(
+        "--keep", action="store_true",
+        help="Don't tear down Inbucket after tests",
+    )
+    live_parser.add_argument(
+        "--inbucket-url", default=None,
+        help="Use an existing Inbucket instance",
+    )
+    live_parser.add_argument(
+        "--timeout", type=int, default=30,
+        help="Max seconds to wait for pipeline processing",
+    )
+
+    # mailagent test quick
+    quick_parser = test_sub.add_parser("quick", parents=[common], help="Ad-hoc single email test")
+    quick_parser.add_argument("--inbox", default=None, help="Target inbox address")
+    quick_parser.add_argument("--from", dest="from_addr", default=None, help="Sender address")
+    quick_parser.add_argument("--subject", default=None, help="Email subject")
+    quick_parser.add_argument("--body", default=None, help="Email body (or - for stdin)")
+    quick_parser.add_argument("--describe", default=None, help="Generate email from description")
+    quick_parser.add_argument("--live", action="store_true", help="Run through full pipeline via Inbucket")
+
+    # Legacy positional arg for backwards compat: mailagent test <eml_path>
+    test_parser.add_argument("eml_path", nargs="?", default=None, help=argparse.SUPPRESS)
 
     subparsers.add_parser(
         "schema", parents=[common], help="Print JSON Schema to stdout"
@@ -125,7 +189,8 @@ def _cmd_validate(config_path: str, verbose: bool) -> int:
     return 0
 
 
-def _cmd_test(eml_path: Path, config_path: str, verbose: bool) -> int:
+def _cmd_test_eml(eml_path: Path, config_path: str, verbose: bool) -> int:
+    """Legacy: dry-run a single .eml file through the pipeline."""
     if not eml_path.exists():
         print(f"Input file not found: {eml_path}", file=sys.stderr)
         return 1
@@ -179,6 +244,95 @@ def _cmd_test(eml_path: Path, config_path: str, verbose: bool) -> int:
     print(json.dumps(action_preview, indent=2, sort_keys=True))
 
     return 0
+
+
+def _cmd_test_dry(args: argparse.Namespace) -> int:
+    config_path = args.config
+    verbose = args.verbose
+    setup_logging(verbose=verbose)
+
+    from .testing.runner import load_test_config, run_dry
+
+    try:
+        test_config = load_test_config(args.tests)
+    except (FileNotFoundError, ValueError) as exc:
+        print(f"Error loading test file: {exc}", file=sys.stderr)
+        return 1
+
+    resolved_config = test_config.config_path
+    if not Path(resolved_config).is_absolute():
+        resolved_config = str(Path(args.tests).parent / resolved_config)
+
+    try:
+        return run_dry(
+            test_config=test_config,
+            config_path=config_path if config_path != DEFAULT_CONFIG else resolved_config,
+            filter_name=args.filter_name,
+            no_generate=args.no_generate,
+            verbose=verbose,
+        )
+    except ConfigError as exc:
+        print(f"Config validation failed:\n{exc}", file=sys.stderr)
+        return 1
+
+
+def _cmd_test_live(args: argparse.Namespace) -> int:
+    config_path = args.config
+    verbose = args.verbose
+    setup_logging(verbose=verbose)
+
+    from .testing.runner import load_test_config, run_live
+
+    try:
+        test_config = load_test_config(args.tests)
+    except (FileNotFoundError, ValueError) as exc:
+        print(f"Error loading test file: {exc}", file=sys.stderr)
+        return 1
+
+    resolved_config = test_config.config_path
+    if not Path(resolved_config).is_absolute():
+        resolved_config = str(Path(args.tests).parent / resolved_config)
+
+    try:
+        return run_live(
+            test_config=test_config,
+            config_path=config_path if config_path != DEFAULT_CONFIG else resolved_config,
+            filter_name=args.filter_name,
+            keep=args.keep,
+            inbucket_url=args.inbucket_url,
+            timeout_seconds=args.timeout,
+            verbose=verbose,
+        )
+    except ConfigError as exc:
+        print(f"Config validation failed:\n{exc}", file=sys.stderr)
+        return 1
+
+
+def _cmd_test_quick(args: argparse.Namespace) -> int:
+    config_path = args.config
+    verbose = args.verbose
+    setup_logging(verbose=verbose)
+
+    from .testing.runner import run_quick
+
+    body = args.body
+    if body == "-":
+        body = sys.stdin.read()
+
+    try:
+        return run_quick(
+            config_path=config_path,
+            inbox_address=args.inbox,
+            from_addr=args.from_addr,
+            subject=args.subject,
+            body=body,
+            describe=args.describe,
+            live=args.live,
+            verbose=verbose,
+        )
+    except ConfigError as exc:
+        print(f"Config validation failed:\n{exc}", file=sys.stderr)
+        return 1
 
 
 def _select_inbox(config, to_addr: str):
