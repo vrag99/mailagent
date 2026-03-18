@@ -403,6 +403,11 @@
         "address": {
           "$ref": "#/$defs/emailAddress"
         },
+        "name": {
+          "type": "string",
+          "description": "Display name for this inbox, e.g. 'Jane Doe'. Used as the From name when sending replies.",
+          "minLength": 1
+        },
         "classify_provider": {
           "type": "string",
           "description": "Optional override of defaults.classify_provider for this inbox.",

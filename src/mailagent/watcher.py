@@ -117,11 +117,13 @@ def process_email(
             or "You are a helpful email assistant.",
         )
         workflow_name = classification.workflow_name
+        conf_str = f" confidence={classification.confidence}" if classification.confidence is not None else ""
         logger.info(
-            "Classified for inbox %s as workflow=%s method=%s",
+            "Classified for inbox %s as workflow=%s method=%s%s",
             runtime.inbox.address,
             classification.workflow_name,
             classification.method,
+            conf_str,
         )
     except Exception as exc:
         logger.error("Classification failed for %s: %s", filepath, exc)

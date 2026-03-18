@@ -48,6 +48,7 @@ defaults:
 
 inboxes:
   - address: you@example.com
+    name: Jane Doe
     classify_provider: fast
     reply_provider: smart
     system_prompt: |
@@ -115,6 +116,7 @@ inboxes:
           type: ignore
 
   - address: support@example.com
+    name: Example Support
     classify_provider: fast
     reply_provider: router
     credentials:

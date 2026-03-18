@@ -239,6 +239,8 @@ def _cmd_test_eml(eml_path: Path, config_path: str, verbose: bool) -> int:
     print(f"  inbox: {inbox.address}")
     print(f"  workflow: {result.workflow_name}")
     print(f"  method: {result.method}")
+    if result.confidence is not None:
+        print(f"  confidence: {result.confidence}")
     print()
     print("Action preview")
     print(json.dumps(action_preview, indent=2, sort_keys=True))

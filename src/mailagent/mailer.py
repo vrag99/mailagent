@@ -22,6 +22,7 @@ def send_reply(
     mail_host: str,
     inbox_address: str,
     password: str,
+    inbox_name: str | None = None,
 ) -> Message:
     local, domain = inbox_address.split("@", 1)
 
@@ -33,8 +34,10 @@ def send_reply(
     if original.message_id:
         references = f"{references} {original.message_id}".strip()
 
+    from_header = f"{inbox_name} <{inbox_address}>" if inbox_name else inbox_address
+
     reply = MIMEMultipart()
-    reply["From"] = inbox_address
+    reply["From"] = from_header
     reply["To"] = original.from_addr
     reply["Subject"] = subject
     reply["Date"] = email.utils.formatdate(localtime=True)

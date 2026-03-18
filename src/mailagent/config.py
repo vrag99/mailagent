@@ -74,6 +74,7 @@ class InboxConfig:
     workflows: list[Workflow]
     classify_provider: str
     reply_provider: str
+    name: str | None = None
     system_prompt: str | None = None
     blocklist: Blocklist | None = None
 
@@ -303,6 +304,7 @@ def _build_typed_config(
                 workflows=workflows,
                 classify_provider=classify_provider,
                 reply_provider=reply_provider,
+                name=raw_inbox.get("name"),
                 system_prompt=system_prompt,
                 blocklist=merged_blocklist,
             )
