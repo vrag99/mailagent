@@ -1,3 +1,18 @@
+Metadata-Version: 2.4
+Name: mailagent
+Version: 0.2.0
+Summary: General-purpose agentic inbox for docker-mailserver
+Requires-Python: >=3.11
+Description-Content-Type: text/markdown
+Requires-Dist: beautifulsoup4>=4.12.0
+Requires-Dist: httpx>=0.27.0
+Requires-Dist: imapclient>=3.0.0
+Requires-Dist: inotify_simple>=2.0.0; sys_platform == "linux"
+Requires-Dist: jsonschema>=4.23.0
+Requires-Dist: pyyaml>=6.0.0
+Provides-Extra: dev
+Requires-Dist: pytest>=8.0.0; extra == "dev"
+
 # mailagent
 
 General-purpose agentic inbox for docker-mailserver.

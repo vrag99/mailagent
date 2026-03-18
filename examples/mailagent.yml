@@ -1,0 +1,156 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/mailagent/mailagent/main/schema.json
+
+providers:
+  fast:
+    type: groq
+    model: llama-3.3-70b-versatile
+    api_key: ${GROQ_API_KEY}
+
+  smart:
+    type: anthropic
+    model: claude-sonnet-4-20250514
+    api_key: ${ANTHROPIC_API_KEY}
+
+  openai-gpt4:
+    type: openai
+    model: gpt-4o
+    api_key: ${OPENAI_API_KEY}
+
+  router:
+    type: openrouter
+    model: anthropic/claude-sonnet-4
+    api_key: ${OPENROUTER_API_KEY}
+    http_referer: https://example.com
+    x_title: mailagent
+
+  google:
+    type: gemini
+    model: gemini-2.0-flash
+    api_key: ${GEMINI_API_KEY}
+
+defaults:
+  classify_provider: fast
+  reply_provider: smart
+  system_prompt: |
+    You are a helpful email assistant.
+  blocklist:
+    from_patterns:
+      - "noreply@"
+      - "no-reply@"
+      - "mailer-daemon@"
+      - "notifications@"
+      - "alert@"
+    headers:
+      - "List-Unsubscribe"
+      - "Precedence: bulk"
+      - "Precedence: list"
+      - "X-Auto-Response-Suppress"
+
+inboxes:
+  - address: you@example.com
+    classify_provider: fast
+    reply_provider: smart
+    system_prompt: |
+      You are the personal email assistant for this inbox.
+      Be concise, friendly, and natural.
+    blocklist:
+      from_patterns:
+        - "recruiter@"
+    credentials:
+      password: ${MAIL_PASSWORD}
+    workflows:
+      - name: meeting-request
+        match:
+          intent: "requesting a meeting, call, or video chat"
+          keywords:
+            any: ["meeting", "schedule", "call", "sync", "catch up", "video chat", "zoom", "google meet"]
+        action:
+          type: reply
+          prompt: |
+            Someone wants to schedule a meeting.
+            Say you are generally available weekday afternoons and ask for a few time slots.
+            Keep it to 3-4 sentences.
+
+      - name: invoice
+        match:
+          intent: "invoice, payment request, or billing notification"
+          keywords:
+            all: ["invoice"]
+            any: ["payment", "due", "amount", "billing"]
+        action:
+          type: webhook
+          url: ${INVOICE_WEBHOOK_URL}
+          method: POST
+          headers:
+            Authorization: "Bearer ${WEBHOOK_TOKEN}"
+          payload:
+            from: "{{from}}"
+            subject: "{{subject}}"
+            date: "{{date}}"
+            body: "{{body_truncated}}"
+
+      - name: cold-outreach
+        match:
+          intent: "cold outreach, sales pitch, recruitment spam, marketing"
+          keywords:
+            any: ["unsubscribe", "opt out", "limited time", "exclusive offer"]
+        action:
+          type: ignore
+
+      - name: urgent
+        match:
+          intent: "urgent request requiring immediate personal attention"
+        action:
+          type: notify
+          webhook: ${NOTIFY_WEBHOOK_URL}
+          also_reply: true
+          prompt: |
+            Acknowledge the email and say you will look into it shortly.
+            Keep it to 2 sentences.
+
+      - name: fallback
+        match:
+          intent: default
+        action:
+          type: ignore
+
+  - address: support@example.com
+    classify_provider: fast
+    reply_provider: router
+    credentials:
+      password: ${SUPPORT_MAIL_PASSWORD}
+    system_prompt: |
+      You are an automated support assistant.
+      Be professional and helpful.
+    workflows:
+      - name: bug-report
+        match:
+          intent: "bug report, error, something broken"
+          keywords:
+            any: ["bug", "error", "broken", "crash", "not working", "issue"]
+        action:
+          type: reply
+          prompt: |
+            Thank the sender for reporting the issue.
+            Say the issue has been logged and ask for steps to reproduce if missing.
+          also_webhook: true
+          webhook_url: ${BUG_WEBHOOK_URL}
+
+      - name: fallback
+        match:
+          intent: default
+        action:
+          type: reply
+          prompt: |
+            Thank them for reaching out and say someone will follow up soon.
+
+settings:
+  catch_up_on_start: true
+  debounce_ms: 200
+  classify_body_limit: 2000
+  reply_body_limit: 8000
+  llm_retries: 1
+  llm_timeout_seconds: 30
+  data_dir: /app/data
+  log_level: info
+  mail_host: mailserver

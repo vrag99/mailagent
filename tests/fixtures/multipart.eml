@@ -1,0 +1,24 @@
+From: Bob <bob@external.example>
+To: you@example.com
+Subject: Project approval needed
+Date: Mon, 10 Mar 2025 10:00:00 +0000
+Message-ID: <multi789@external.example>
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="boundary42"
+
+--boundary42
+Content-Type: text/plain; charset=utf-8
+
+Hi,
+
+I need your approval on the Q2 budget proposal. Please review and get back to me.
+
+Thanks,
+Bob
+
+--boundary42
+Content-Type: text/html; charset=utf-8
+
+<html><body><p>Hi,</p><p>I need your <b>approval</b> on the Q2 budget proposal.</p></body></html>
+
+--boundary42--

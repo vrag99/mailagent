@@ -1,0 +1,500 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/mailagent/mailagent/main/schema.json",
+  "title": "mailagent configuration",
+  "description": "Configuration for mailagent, a multi-inbox workflow automation agent for docker-mailserver.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "providers",
+    "defaults",
+    "inboxes"
+  ],
+  "properties": {
+    "providers": {
+      "type": "object",
+      "description": "Named LLM provider configurations. Workflows and inbox defaults reference these names.",
+      "minProperties": 1,
+      "additionalProperties": {
+        "$ref": "#/$defs/providerConfig"
+      },
+      "examples": [
+        {
+          "fast": {
+            "type": "groq",
+            "model": "llama-3.3-70b-versatile",
+            "api_key": "${GROQ_API_KEY}"
+          },
+          "smart": {
+            "type": "anthropic",
+            "model": "claude-sonnet-4-20250514",
+            "api_key": "${ANTHROPIC_API_KEY}"
+          }
+        }
+      ]
+    },
+    "defaults": {
+      "$ref": "#/$defs/defaults"
+    },
+    "inboxes": {
+      "type": "array",
+      "description": "Inbox definitions. Each inbox has its own workflow list, credentials, and optional provider overrides.",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/inbox"
+      }
+    },
+    "settings": {
+      "$ref": "#/$defs/settings"
+    }
+  },
+  "$defs": {
+    "envOrString": {
+      "type": "string",
+      "description": "Any string, including env interpolation syntax like ${VAR_NAME} or ${VAR_NAME:-default}.",
+      "pattern": "^(\\$\\{[A-Z_][A-Z0-9_]*(?::-[^}]*)?\\}|.+)$"
+    },
+    "emailAddress": {
+      "type": "string",
+      "description": "Email address, for example you@example.com.",
+      "pattern": "^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$"
+    },
+    "providerType": {
+      "type": "string",
+      "description": "Provider adapter type.",
+      "enum": [
+        "openai",
+        "anthropic",
+        "gemini",
+        "openrouter",
+        "groq"
+      ]
+    },
+    "providerConfig": {
+      "type": "object",
+      "description": "Single provider configuration. The object key under providers is the provider name referenced elsewhere.",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "model",
+        "api_key"
+      ],
+      "properties": {
+        "type": {
+          "$ref": "#/$defs/providerType"
+        },
+        "model": {
+          "type": "string",
+          "description": "Model identifier for the selected provider, for example gpt-4o or claude-sonnet-4-20250514.",
+          "minLength": 1
+        },
+        "api_key": {
+          "$ref": "#/$defs/envOrString"
+        },
+        "base_url": {
+          "type": "string",
+          "description": "Optional base URL override, useful for OpenAI-compatible endpoints.",
+          "format": "uri"
+        },
+        "timeout": {
+          "type": "integer",
+          "description": "HTTP timeout in seconds for this provider. Defaults to settings.llm_timeout_seconds.",
+          "minimum": 1,
+          "default": 30
+        },
+        "retries": {
+          "type": "integer",
+          "description": "Retry count for provider calls on timeout or 5xx response.",
+          "minimum": 0,
+          "default": 1
+        },
+        "http_referer": {
+          "type": "string",
+          "description": "Optional OpenRouter attribution header (HTTP-Referer).",
+          "format": "uri"
+        },
+        "x_title": {
+          "type": "string",
+          "description": "Optional OpenRouter attribution header (X-Title).",
+          "minLength": 1
+        }
+      }
+    },
+    "blocklist": {
+      "type": "object",
+      "description": "Blocklist rules for senders and headers. Matching emails are never auto-replied.",
+      "additionalProperties": false,
+      "properties": {
+        "from_patterns": {
+          "type": "array",
+          "description": "Case-insensitive substring patterns matched against sender email, for example noreply@.",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "default": []
+        },
+        "headers": {
+          "type": "array",
+          "description": "Header names or literal header fragments to block, for example List-Unsubscribe or Precedence: bulk.",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "default": []
+        }
+      }
+    },
+    "defaults": {
+      "type": "object",
+      "description": "Global defaults inherited by each inbox unless overridden.",
+      "additionalProperties": false,
+      "required": [
+        "classify_provider",
+        "reply_provider"
+      ],
+      "properties": {
+        "classify_provider": {
+          "type": "string",
+          "description": "Name of provider under providers used for classification by default.",
+          "minLength": 1
+        },
+        "reply_provider": {
+          "type": "string",
+          "description": "Name of provider under providers used for reply generation by default.",
+          "minLength": 1
+        },
+        "system_prompt": {
+          "type": "string",
+          "description": "Global system prompt prepended to all LLM calls. Inbox/workflow prompts are appended as context.",
+          "default": "You are a helpful email assistant."
+        },
+        "blocklist": {
+          "$ref": "#/$defs/blocklist"
+        }
+      }
+    },
+    "credentials": {
+      "type": "object",
+      "description": "Per-inbox authentication details for sending replies and IMAP updates.",
+      "additionalProperties": false,
+      "required": [
+        "password"
+      ],
+      "properties": {
+        "password": {
+          "$ref": "#/$defs/envOrString"
+        }
+      }
+    },
+    "keywordMatch": {
+      "type": "object",
+      "description": "Keyword fallback matching on subject + body (case-insensitive). Use any, all, or both.",
+      "additionalProperties": false,
+      "properties": {
+        "any": {
+          "type": "array",
+          "description": "OR condition: at least one keyword must appear.",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "all": {
+          "type": "array",
+          "description": "AND condition: every keyword must appear.",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "any"
+          ]
+        },
+        {
+          "required": [
+            "all"
+          ]
+        }
+      ]
+    },
+    "workflowMatch": {
+      "type": "object",
+      "description": "Matching rule for a workflow. intent is used by LLM classification; keywords are fallback rules.",
+      "additionalProperties": false,
+      "required": [
+        "intent"
+      ],
+      "properties": {
+        "intent": {
+          "type": "string",
+          "description": "Natural language intent description. Use intent: default for the catch-all workflow.",
+          "minLength": 1
+        },
+        "keywords": {
+          "$ref": "#/$defs/keywordMatch"
+        }
+      }
+    },
+    "workflowAction": {
+      "type": "object",
+      "description": "Action to execute when a workflow matches.",
+      "additionalProperties": false,
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "description": "Workflow action type.",
+          "enum": [
+            "reply",
+            "ignore",
+            "notify",
+            "webhook"
+          ]
+        },
+        "prompt": {
+          "type": "string",
+          "description": "Prompt used for generated reply text. Required for type: reply and for notify with also_reply true."
+        },
+        "webhook": {
+          "$ref": "#/$defs/envOrString",
+          "description": "Webhook URL for notify action."
+        },
+        "url": {
+          "$ref": "#/$defs/envOrString",
+          "description": "Webhook URL for type: webhook action."
+        },
+        "method": {
+          "type": "string",
+          "description": "HTTP method for type: webhook action.",
+          "enum": [
+            "GET",
+            "POST",
+            "PUT",
+            "PATCH",
+            "DELETE"
+          ],
+          "default": "POST"
+        },
+        "headers": {
+          "type": "object",
+          "description": "Additional headers for webhook action. Values can use ${ENV} interpolation.",
+          "additionalProperties": {
+            "$ref": "#/$defs/envOrString"
+          },
+          "default": {}
+        },
+        "payload": {
+          "type": "object",
+          "description": "JSON payload for webhook action. Supports templates like {{from}}, {{subject}}, {{body_truncated}}.",
+          "default": {},
+          "additionalProperties": true
+        },
+        "also_reply": {
+          "type": "boolean",
+          "description": "For notify action, also generate and send a reply.",
+          "default": false
+        },
+        "also_webhook": {
+          "type": "boolean",
+          "description": "For reply action, also call webhook_url after reply generation/sending.",
+          "default": false
+        },
+        "webhook_url": {
+          "$ref": "#/$defs/envOrString",
+          "description": "Webhook URL used when action.type is reply and also_webhook is true."
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "reply"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "required": [
+              "prompt"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "notify"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "required": [
+              "webhook"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "webhook"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "required": [
+              "url"
+            ]
+          }
+        }
+      ]
+    },
+    "workflow": {
+      "type": "object",
+      "description": "Single workflow evaluated in order. First matching workflow wins. Place fallback last.",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "match",
+        "action"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Unique workflow name within an inbox.",
+          "minLength": 1
+        },
+        "match": {
+          "$ref": "#/$defs/workflowMatch"
+        },
+        "action": {
+          "$ref": "#/$defs/workflowAction"
+        }
+      }
+    },
+    "inbox": {
+      "type": "object",
+      "description": "Inbox-specific settings, credentials, and workflow list.",
+      "additionalProperties": false,
+      "required": [
+        "address",
+        "credentials",
+        "workflows"
+      ],
+      "properties": {
+        "address": {
+          "$ref": "#/$defs/emailAddress"
+        },
+        "classify_provider": {
+          "type": "string",
+          "description": "Optional override of defaults.classify_provider for this inbox.",
+          "minLength": 1
+        },
+        "reply_provider": {
+          "type": "string",
+          "description": "Optional override of defaults.reply_provider for this inbox.",
+          "minLength": 1
+        },
+        "system_prompt": {
+          "type": "string",
+          "description": "Inbox-specific system prompt appended to defaults.system_prompt."
+        },
+        "blocklist": {
+          "$ref": "#/$defs/blocklist"
+        },
+        "credentials": {
+          "$ref": "#/$defs/credentials"
+        },
+        "workflows": {
+          "type": "array",
+          "description": "Ordered workflow list for this inbox. Include a fallback workflow last using match.intent: default.",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/workflow"
+          }
+        }
+      }
+    },
+    "settings": {
+      "type": "object",
+      "description": "Advanced runtime settings.",
+      "additionalProperties": false,
+      "properties": {
+        "catch_up_on_start": {
+          "type": "boolean",
+          "description": "Process existing unhandled files from Maildir/new on startup.",
+          "default": true
+        },
+        "debounce_ms": {
+          "type": "integer",
+          "description": "Delay after inotify event before reading file, to avoid partial writes.",
+          "minimum": 0,
+          "default": 200
+        },
+        "classify_body_limit": {
+          "type": "integer",
+          "description": "Maximum body characters sent to LLM during classification.",
+          "minimum": 100,
+          "default": 2000
+        },
+        "reply_body_limit": {
+          "type": "integer",
+          "description": "Maximum body characters sent to LLM during reply generation.",
+          "minimum": 100,
+          "default": 8000
+        },
+        "llm_retries": {
+          "type": "integer",
+          "description": "Default retry count for provider calls if provider-specific retries are not set.",
+          "minimum": 0,
+          "default": 1
+        },
+        "llm_timeout_seconds": {
+          "type": "integer",
+          "description": "Default timeout for provider HTTP requests in seconds if provider-specific timeout is not set.",
+          "minimum": 1,
+          "default": 30
+        },
+        "data_dir": {
+          "type": "string",
+          "description": "Directory for state files and persistent runtime data.",
+          "default": "/app/data"
+        },
+        "log_level": {
+          "type": "string",
+          "description": "Logging verbosity for mailagent.",
+          "enum": [
+            "debug",
+            "info",
+            "warning",
+            "error"
+          ],
+          "default": "info"
+        },
+        "mail_host": {
+          "type": "string",
+          "description": "SMTP/IMAP hostname used when sending replies and syncing Sent/Answered flags.",
+          "default": "mailserver"
+        }
+      }
+    }
+  }
+}

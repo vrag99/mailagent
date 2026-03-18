@@ -1,0 +1,128 @@
+from __future__ import annotations
+
+import json
+import logging
+from dataclasses import dataclass
+
+from .config import Workflow
+from .parser import ParsedEmail
+from .providers import BaseProvider, ProviderError
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class ClassificationResult:
+    workflow_name: str
+    method: str
+    confidence: str | None = None
+
+
+def classify(
+    email: ParsedEmail,
+    workflows: list[Workflow],
+    provider: BaseProvider,
+    system_prompt: str,
+) -> ClassificationResult:
+    """
+    Classify an email into a workflow.
+
+    Strategy:
+    1. Try LLM classification.
+    2. If LLM fails (API error, garbled response), fall back to keyword matching.
+    3. If keywords also don't match, return "fallback".
+    """
+    try:
+        result = _classify_llm(email, workflows, provider, system_prompt)
+        if result:
+            return ClassificationResult(workflow_name=result, method="llm")
+    except ProviderError as exc:
+        logger.warning("LLM classification failed: %s. Falling back to keywords.", exc)
+
+    result = _classify_keywords(email, workflows)
+    if result:
+        return ClassificationResult(workflow_name=result, method="keyword")
+
+    return ClassificationResult(workflow_name="fallback", method="keyword")
+
+
+def _classify_llm(
+    email: ParsedEmail,
+    workflows: list[Workflow],
+    provider: BaseProvider,
+    system_prompt: str,
+) -> str | None:
+    candidates = [wf for wf in workflows if wf.match.intent.lower() != "default"]
+    if not candidates:
+        return None
+
+    allowed = [wf.name for wf in candidates]
+    options = "\n".join(f"- {wf.name}: {wf.match.intent}" for wf in candidates)
+
+    classify_system = (
+        f"{system_prompt}\n\n"
+        "You classify incoming emails into exactly one workflow name.\n"
+        'Return ONLY JSON in this exact form: {"workflow": "<name>"}.\n'
+        "Do not add markdown or explanation."
+    )
+    classify_user = (
+        "Workflows:\n"
+        f"{options}\n\n"
+        f"Allowed workflow names: {', '.join(allowed)}\n\n"
+        "Email:\n"
+        f"From: {email.from_addr}\n"
+        f"Subject: {email.subject}\n"
+        f"Body:\n{email.body_truncated}"
+    )
+
+    raw = provider.classify(classify_system, classify_user)
+    parsed = _parse_llm_workflow(raw)
+    if parsed is None:
+        return None
+
+    for name in allowed:
+        if name == parsed or name.lower() == parsed.lower():
+            return name
+
+    logger.warning("LLM returned unknown workflow %r; falling back.", parsed)
+    return None
+
+
+def _parse_llm_workflow(raw: str) -> str | None:
+    text = raw.strip()
+    if not text:
+        return None
+
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        return text
+
+    workflow = data.get("workflow") if isinstance(data, dict) else None
+    if not isinstance(workflow, str):
+        return None
+    return workflow.strip()
+
+
+def _classify_keywords(email: ParsedEmail, workflows: list[Workflow]) -> str | None:
+    text = f"{email.subject}\n{email.body_plain}".lower()
+
+    for workflow in workflows:
+        if workflow.match.intent.lower() == "default":
+            continue
+        keywords = workflow.match.keywords
+        if not keywords or (not keywords.any and not keywords.all):
+            continue
+
+        any_ok = True
+        all_ok = True
+
+        if keywords.any:
+            any_ok = any(keyword.lower() in text for keyword in keywords.any)
+        if keywords.all:
+            all_ok = all(keyword.lower() in text for keyword in keywords.all)
+
+        if any_ok and all_ok:
+            return workflow.name
+
+    return None

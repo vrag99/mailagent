@@ -1,0 +1,58 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/mailagent/mailagent/main/schema.json
+
+providers:
+  fast:
+    type: groq
+    model: llama-3.3-70b-versatile
+    api_key: ${GROQ_API_KEY}
+
+defaults:
+  classify_provider: fast
+  reply_provider: fast
+  system_prompt: |
+    You are a helpful email assistant.
+  blocklist:
+    from_patterns:
+      - "noreply@"
+      - "no-reply@"
+      - "mailer-daemon@"
+      - "notifications@"
+      - "alert@"
+    headers:
+      - "List-Unsubscribe"
+      - "Precedence: bulk"
+      - "Precedence: list"
+      - "X-Auto-Response-Suppress"
+
+inboxes:
+  - address: you@example.com
+    credentials:
+      password: ${MAIL_PASSWORD}
+    workflows:
+      - name: meeting-request
+        match:
+          intent: "requesting a meeting, call, or video chat"
+          keywords:
+            any: ["meeting", "schedule", "call", "sync", "zoom"]
+        action:
+          type: reply
+          prompt: |
+            Acknowledge the request and ask for a few available slots.
+            Keep it short and friendly. Sign off as "You".
+
+      - name: fallback
+        match:
+          intent: default
+        action:
+          type: ignore
+
+settings:
+  catch_up_on_start: true
+  debounce_ms: 200
+  classify_body_limit: 2000
+  reply_body_limit: 8000
+  llm_retries: 1
+  llm_timeout_seconds: 30
+  data_dir: /app/data
+  log_level: info
+  mail_host: mailserver

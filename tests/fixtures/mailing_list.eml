@@ -1,0 +1,10 @@
+From: Newsletters <noreply@service.example>
+To: you@example.com
+Subject: Your weekly digest
+Date: Mon, 10 Mar 2025 10:00:00 +0000
+Message-ID: <digest@service.example>
+List-Unsubscribe: <mailto:unsub@service.example>
+Precedence: bulk
+Content-Type: text/plain; charset=utf-8
+
+Here is your weekly digest and updates.
