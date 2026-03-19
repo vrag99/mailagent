@@ -90,6 +90,9 @@ class Settings:
     data_dir: str = "/app/data"
     log_level: str = "info"
     mail_host: str = "mailserver"
+    max_thread_replies: int = 3
+    thread_context_limit: int = 3000
+    thread_history_max: int = 5
 
 
 @dataclass
@@ -250,6 +253,9 @@ def _build_typed_config(
         data_dir=settings_raw.get("data_dir", "/app/data"),
         log_level=settings_raw.get("log_level", "info"),
         mail_host=settings_raw.get("mail_host", "mailserver"),
+        max_thread_replies=int(settings_raw.get("max_thread_replies", 3)),
+        thread_context_limit=int(settings_raw.get("thread_context_limit", 3000)),
+        thread_history_max=int(settings_raw.get("thread_history_max", 5)),
     )
 
     inboxes: list[InboxConfig] = []

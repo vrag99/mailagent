@@ -78,6 +78,101 @@ def save_and_flag_replied(
                 logger.debug("Flagged original as \\Answered")
 
 
+def fetch_thread_messages(
+    references: str | None,
+    mail_host: str,
+    inbox_address: str,
+    password: str,
+    max_messages: int = 5,
+) -> list:
+    """Retrieve prior messages in a thread via IMAP using the References header."""
+    from .state import ThreadMessage
+
+    if not references:
+        return []
+
+    message_ids = references.strip().split()
+    if not message_ids:
+        return []
+
+    results: list[ThreadMessage] = []
+
+    try:
+        with IMAPClient(mail_host, port=IMAP_PORT, ssl=False) as client:
+            client.starttls()
+            client.login(inbox_address, password)
+
+            folders_to_search = ["INBOX"]
+            all_folders = [f[2] for f in client.list_folders()]
+            for candidate in SENT_FOLDER_CANDIDATES:
+                if candidate in all_folders:
+                    folders_to_search.append(candidate)
+                    break
+
+            seen_ids: set[str] = set()
+
+            for mid in message_ids[-max_messages:]:
+                if mid in seen_ids:
+                    continue
+                seen_ids.add(mid)
+
+                for folder in folders_to_search:
+                    client.select_folder(folder, readonly=True)
+                    uids = client.search(["HEADER", "Message-ID", mid])
+                    if not uids:
+                        continue
+
+                    fetched = client.fetch(uids[:1], ["BODY.PEEK[]"])
+                    for uid, data in fetched.items():
+                        raw_bytes = data.get(b"BODY[]", b"")
+                        if not raw_bytes:
+                            continue
+                        msg = email.message_from_bytes(raw_bytes)
+                        from_addr = msg.get("From", "")
+                        date = msg.get("Date", "")
+                        body = _extract_plain_body(msg)[:500]
+                        results.append(
+                            ThreadMessage(
+                                message_id=mid,
+                                from_addr=from_addr,
+                                date=date,
+                                body_snippet=body,
+                            )
+                        )
+                    break  # found in this folder, skip other folders
+
+                if len(results) >= max_messages:
+                    break
+    except Exception as exc:
+        logger.warning("Failed to fetch thread messages: %s", exc)
+
+    return results
+
+
+def _extract_plain_body(msg: Message) -> str:
+    """Extract plain text body from a message (simple helper for thread fetching)."""
+    if msg.is_multipart():
+        for part in msg.walk():
+            if part.get_content_type() == "text/plain":
+                payload = part.get_payload(decode=True)
+                if payload:
+                    charset = part.get_content_charset() or "utf-8"
+                    try:
+                        return payload.decode(charset, errors="replace")
+                    except LookupError:
+                        return payload.decode("utf-8", errors="replace")
+        return ""
+    if msg.get_content_type() == "text/plain":
+        payload = msg.get_payload(decode=True)
+        if payload:
+            charset = msg.get_content_charset() or "utf-8"
+            try:
+                return payload.decode(charset, errors="replace")
+            except LookupError:
+                return payload.decode("utf-8", errors="replace")
+    return ""
+
+
 def _get_or_create_sent(client: IMAPClient) -> str:
     folders = [f[2] for f in client.list_folders()]
     for candidate in SENT_FOLDER_CANDIDATES:

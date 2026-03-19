@@ -11,6 +11,7 @@ from mailagent.config import (
     WorkflowMatch,
 )
 from mailagent.parser import parse
+from mailagent.state import ThreadContext, ThreadMessage
 from mailagent.workflows import execute
 
 
@@ -145,3 +146,97 @@ def test_reply_flow_calls_mailer(plain_text_eml):
     assert out["ok"] is True
     send_reply.assert_called_once()
     save_and_flag.assert_called_once()
+
+
+def test_reply_blocked_by_thread_depth(plain_text_eml):
+    config, inbox = _config()
+    config.settings.max_thread_replies = 2
+    parsed = parse(plain_text_eml)
+
+    thread_ctx = ThreadContext(is_reply=True, is_reply_to_own=True, depth=2)
+
+    out = execute(
+        workflow_name="meeting-request",
+        parsed_email=parsed,
+        inbox=inbox,
+        config=config,
+        reply_provider=FakeProvider(),
+        dry_run=False,
+        thread_ctx=thread_ctx,
+    )
+
+    assert out["ok"] is True
+    assert out["blocked"] is True
+    assert out["block_reason"] == "thread_depth_exceeded"
+
+
+def test_reply_allowed_below_thread_depth(plain_text_eml):
+    config, inbox = _config()
+    config.settings.max_thread_replies = 3
+    parsed = parse(plain_text_eml)
+
+    thread_ctx = ThreadContext(is_reply=True, is_reply_to_own=True, depth=2)
+
+    with (
+        patch("mailagent.mailer.send_reply") as send_reply,
+        patch("mailagent.mailer.save_and_flag_replied"),
+    ):
+        send_reply.return_value = object()
+
+        out = execute(
+            workflow_name="meeting-request",
+            parsed_email=parsed,
+            inbox=inbox,
+            config=config,
+            reply_provider=FakeProvider(),
+            dry_run=False,
+            thread_ctx=thread_ctx,
+        )
+
+    assert out["ok"] is True
+    assert out.get("blocked") is not True
+
+
+def test_reply_context_includes_thread_history(plain_text_eml):
+    config, inbox = _config()
+    parsed = parse(plain_text_eml)
+
+    thread_ctx = ThreadContext(
+        is_reply=True,
+        is_reply_to_own=True,
+        depth=1,
+        prior_messages=[
+            ThreadMessage(
+                message_id="<prev@example.com>",
+                from_addr="you@example.com",
+                date="Mon, 10 Mar 2025",
+                body_snippet="Thanks for your meeting request.",
+            ),
+        ],
+    )
+
+    captured_prompt = {}
+
+    class CapturingProvider:
+        def generate(self, system_prompt: str, user_prompt: str) -> str:
+            captured_prompt["user"] = user_prompt
+            return "Got it."
+
+    with (
+        patch("mailagent.mailer.send_reply") as send_reply,
+        patch("mailagent.mailer.save_and_flag_replied"),
+    ):
+        send_reply.return_value = object()
+
+        execute(
+            workflow_name="meeting-request",
+            parsed_email=parsed,
+            inbox=inbox,
+            config=config,
+            reply_provider=CapturingProvider(),
+            dry_run=False,
+            thread_ctx=thread_ctx,
+        )
+
+    assert "Previous messages in this thread" in captured_prompt["user"]
+    assert "Thanks for your meeting request." in captured_prompt["user"]

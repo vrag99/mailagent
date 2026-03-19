@@ -2,6 +2,7 @@ from mailagent.classifier import _classify_keywords, classify
 from mailagent.config import KeywordMatch, Workflow, WorkflowAction, WorkflowMatch
 from mailagent.parser import parse
 from mailagent.providers import ProviderError
+from mailagent.state import ThreadContext
 
 
 class FakeProvider:
@@ -116,3 +117,34 @@ def test_full_fallback_chain_to_fallback(non_utf8_eml):
     result = classify(parsed, workflows, provider, "You are assistant")
     assert result.workflow_name == "fallback"
     assert result.method == "keyword"
+
+
+def test_classify_includes_thread_annotation(plain_text_eml):
+    parsed = parse(plain_text_eml)
+    captured_user_prompt = {}
+
+    class CapturingProvider:
+        def classify(self, system: str, user: str) -> str:
+            captured_user_prompt["text"] = user
+            return '{"workflow": "meeting-request"}'
+
+    thread_ctx = ThreadContext(is_reply=True, is_reply_to_own=True, depth=2)
+    classify(parsed, _workflows(), CapturingProvider(), "You are assistant", thread_ctx=thread_ctx)
+
+    assert "[Thread context:" in captured_user_prompt["text"]
+    assert "Thread depth: 2" in captured_user_prompt["text"]
+
+
+def test_classify_no_annotation_when_not_own_reply(plain_text_eml):
+    parsed = parse(plain_text_eml)
+    captured_user_prompt = {}
+
+    class CapturingProvider:
+        def classify(self, system: str, user: str) -> str:
+            captured_user_prompt["text"] = user
+            return '{"workflow": "meeting-request"}'
+
+    thread_ctx = ThreadContext(is_reply=True, is_reply_to_own=False, depth=0)
+    classify(parsed, _workflows(), CapturingProvider(), "You are assistant", thread_ctx=thread_ctx)
+
+    assert "[Thread context:" not in captured_user_prompt["text"]

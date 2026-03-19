@@ -11,7 +11,7 @@ from .classifier import classify
 from .config import Config, InboxConfig
 from .parser import parse
 from .providers import BaseProvider, get_provider
-from .state import InboxState
+from .state import InboxState, ThreadContext, ThreadState
 from .workflows import execute
 
 logger = logging.getLogger(__name__)
@@ -22,6 +22,7 @@ class InboxRuntime:
     inbox: InboxConfig
     watch_path: Path
     state: InboxState
+    thread_state: ThreadState
     classify_provider: BaseProvider
     reply_provider: BaseProvider
 
@@ -36,10 +37,14 @@ def run(config: Config, stop_event: threading.Event | None = None) -> None:
             logger.error("Maildir not found for %s: %s", inbox.address, watch_path)
             continue
 
+        thread_state = ThreadState(config.settings.data_dir, inbox.address)
+        thread_state.prune()
+
         runtime = InboxRuntime(
             inbox=inbox,
             watch_path=watch_path,
             state=InboxState(config.settings.data_dir, inbox.address),
+            thread_state=thread_state,
             classify_provider=build_provider(config, inbox.classify_provider),
             reply_provider=build_provider(config, inbox.reply_provider),
         )
@@ -108,6 +113,12 @@ def process_email(
 
     logger.info("Email from=%s subject=%r", parsed.from_email, parsed.subject)
 
+    thread_ctx = ThreadContext(
+        is_reply=bool(parsed.in_reply_to),
+        is_reply_to_own=runtime.thread_state.is_own(parsed.in_reply_to or ""),
+        depth=runtime.thread_state.get_depth(parsed.in_reply_to or ""),
+    )
+
     try:
         classification = classify(
             email=parsed,
@@ -115,6 +126,7 @@ def process_email(
             provider=runtime.classify_provider,
             system_prompt=runtime.inbox.system_prompt
             or "You are a helpful email assistant.",
+            thread_ctx=thread_ctx,
         )
         workflow_name = classification.workflow_name
         conf_str = f" confidence={classification.confidence}" if classification.confidence is not None else ""
@@ -137,6 +149,8 @@ def process_email(
             config=config,
             reply_provider=runtime.reply_provider,
             dry_run=False,
+            thread_ctx=thread_ctx,
+            thread_state=runtime.thread_state,
         )
     except Exception as exc:
         logger.error("Workflow execution failed for %s: %s", filepath, exc)
