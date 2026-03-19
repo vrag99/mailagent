@@ -45,27 +45,27 @@ download() {
 ask() {
     local prompt="$1" default="${2:-}" reply
     if [ -n "$default" ]; then
-        printf "${BOLD}%s${NC} [%s]: " "$prompt" "$default"
+        printf "${BOLD}%s${NC} [%s]: " "$prompt" "$default" >/dev/tty
     else
-        printf "${BOLD}%s${NC}: " "$prompt"
+        printf "${BOLD}%s${NC}: " "$prompt" >/dev/tty
     fi
-    read -r reply
+    read -r reply </dev/tty
     echo "${reply:-$default}"
 }
 
 ask_password() {
     local prompt="$1" reply
-    printf "${BOLD}%s${NC}: " "$prompt"
-    read -rs reply
-    echo
+    printf "${BOLD}%s${NC}: " "$prompt" >/dev/tty
+    read -rs reply </dev/tty
+    echo >/dev/tty
     echo "$reply"
 }
 
 ask_number() {
     local prompt="$1" default="${2:-1}" reply
     while true; do
-        printf "${BOLD}%s${NC} [%s]: " "$prompt" "$default"
-        read -r reply
+        printf "${BOLD}%s${NC} [%s]: " "$prompt" "$default" >/dev/tty
+        read -r reply </dev/tty
         reply="${reply:-$default}"
         if [[ "$reply" =~ ^[0-9]+$ ]] && [ "$reply" -gt 0 ]; then
             echo "$reply"
@@ -253,10 +253,11 @@ cat >> compose.yaml <<MAILAGENT_BLOCK
     env_file: mailagent.env
     volumes:
       - ./mailagent.yml:/app/config.yml:ro
-      - mail-data:/var/mail
+      - ./docker-data/dms/mail-data/:/var/mail
     depends_on:
       - mailserver
     restart: unless-stopped
+
 MAILAGENT_BLOCK
 
 ok "Appended mailagent service to compose.yaml"
