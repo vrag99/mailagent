@@ -1,0 +1,165 @@
+# DON'T REMOVE THE NEXT LINE - THIS IS LANGUAGE SERVER CONFIGURATION TO PROVIDE AUTOCOMPLETE
+# yaml-language-server: $schema=https://raw.githubusercontent.com/vrag99/mailagent/main/schema.json
+# 
+# mailagent starter configuration
+#
+# This is an example to help you build your own mailagent.yml.
+# Copy this file, rename it to mailagent.yml, and customize it.
+#
+# Full reference: https://github.com/vrag99/mailagent
+
+# ── Providers ──
+# Each provider connects to an LLM API. You can define multiple providers
+# and assign them per-inbox or as defaults. Provider names are arbitrary
+# labels you pick (e.g. "fast", "smart", "cheap").
+#
+# Supported types: groq, openai, anthropic, gemini, openrouter
+# API keys use ${VAR} syntax to read from environment / .env file.
+
+providers:
+  fast:
+    type: groq
+    model: llama-3.3-70b-versatile
+    api_key: ${GROQ_API_KEY}
+
+  smart:
+    type: anthropic
+    model: claude-sonnet-4-20250514
+    api_key: ${ANTHROPIC_API_KEY}
+
+# ── Defaults ──
+# These apply to all inboxes unless overridden at the inbox level.
+#
+# classify_provider: used to classify incoming emails into workflows
+# reply_provider:    used to generate email replies
+# system_prompt:     personality / instructions for the LLM
+# blocklist:         skip emails matching these patterns (no LLM call)
+
+defaults:
+  classify_provider: fast
+  reply_provider: smart
+  system_prompt: |
+    You are a helpful email assistant.
+  blocklist:
+    # Skip common automated senders
+    from_patterns:
+      - "noreply@"
+      - "no-reply@"
+      - "mailer-daemon@"
+      - "notifications@"
+      - "alert@"
+    # Skip bulk / mailing-list emails by header
+    headers:
+      - "List-Unsubscribe"
+      - "Precedence: bulk"
+      - "Precedence: list"
+      - "X-Auto-Response-Suppress"
+
+# ── Inboxes ──
+# Each inbox monitors one email address. Workflows are checked top-to-bottom;
+# the first matching workflow wins. Always end with a "fallback" workflow.
+
+inboxes:
+  - address: you@example.com
+    name: Your Name
+    credentials:
+      password: ${MAIL_PASSWORD_1}
+
+    # Optional: override the default providers for this inbox
+    # classify_provider: fast
+    # reply_provider: smart
+
+    # Optional: inbox-level system prompt (overrides defaults.system_prompt)
+    # system_prompt: |
+    #   You are the assistant for this specific inbox.
+
+    # Optional: inbox-level blocklist (merged with defaults.blocklist)
+    # blocklist:
+    #   from_patterns:
+    #     - "recruiter@"
+
+    workflows:
+      # ── Meeting requests ──
+      # Matches emails about scheduling meetings and auto-replies.
+      - name: meeting-request
+        match:
+          # intent: natural-language description of what this workflow handles.
+          # The LLM uses this to decide if an email fits.
+          intent: "requesting a meeting, call, or video chat"
+          # keywords: optional hard filters applied BEFORE the LLM.
+          # "any" = at least one must appear; "all" = every keyword must appear.
+          keywords:
+            any: ["meeting", "schedule", "call", "sync", "zoom"]
+        action:
+          type: reply
+          prompt: |
+            Acknowledge the request and ask for a few available time slots.
+            Keep it short and friendly.
+
+      # ── Invoices ──
+      # Forward invoice emails to an external system via webhook.
+      # - name: invoice
+      #   match:
+      #     intent: "invoice, payment request, or billing notification"
+      #     keywords:
+      #       all: ["invoice"]
+      #       any: ["payment", "due", "amount"]
+      #   action:
+      #     type: webhook
+      #     url: ${INVOICE_WEBHOOK_URL}
+      #     method: POST
+      #     headers:
+      #       Authorization: "Bearer ${WEBHOOK_TOKEN}"
+      #     payload:
+      #       from: "{{from}}"
+      #       subject: "{{subject}}"
+      #       body: "{{body_truncated}}"
+
+      # ── Urgent emails ──
+      # Notify you via webhook AND send a short auto-reply.
+      # - name: urgent
+      #   match:
+      #     intent: "urgent request requiring immediate personal attention"
+      #   action:
+      #     type: notify
+      #     webhook: ${NOTIFY_WEBHOOK_URL}
+      #     also_reply: true
+      #     prompt: |
+      #       Acknowledge the email and say you will look into it shortly.
+
+      # ── Fallback ──
+      # Catches everything that didn't match above. Required.
+      # Change "ignore" to "reply" if you want auto-replies for all unmatched mail.
+      - name: fallback
+        match:
+          intent: default
+        action:
+          type: ignore
+
+# ── Settings ──
+# Tune runtime behavior. All fields are optional with sensible defaults.
+
+settings:
+  # mail_host: your IMAP server. When running alongside docker-mailserver
+  # in the same compose stack, use "mailserver" (the DMS service name).
+  mail_host: mailserver
+
+  # Process emails that arrived while mailagent was stopped
+  # catch_up_on_start: true
+
+  # Debounce rapid maildir events (milliseconds)
+  # debounce_ms: 200
+
+  # Max characters of email body sent to the LLM for classification / reply
+  # classify_body_limit: 2000
+  # reply_body_limit: 8000
+
+  # LLM retry and timeout settings
+  # llm_retries: 1
+  # llm_timeout_seconds: 30
+
+  # Where mailagent stores its state (inside the container)
+  # data_dir: /app/data
+
+  # Log level: debug, info, warning, error
+  # log_level: info

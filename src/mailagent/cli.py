@@ -57,10 +57,6 @@ def main(argv: list[str] | None = None) -> int:
         # Fallback: treat subcommand as eml path for backwards compat
         return _cmd_test_eml(Path(subcommand), config_path, verbose)
 
-    if command == "setup":
-        from .setup_wizard import run_setup
-        return run_setup(output_dir=getattr(args, "output_dir", "."))
-
     if command == "run":
         return _cmd_run(config_path, verbose)
 
@@ -143,12 +139,6 @@ def _build_parser() -> argparse.ArgumentParser:
 
     subparsers.add_parser(
         "schema", parents=[common], help="Print JSON Schema to stdout"
-    )
-
-    # mailagent setup
-    setup_parser = subparsers.add_parser("setup", help="Interactive setup wizard")
-    setup_parser.add_argument(
-        "-o", "--output-dir", default=".", help="Output directory"
     )
 
     return parser

@@ -27,7 +27,6 @@ dependencies = [
   "inotify_simple>=2.0.0; sys_platform == 'linux'",
   "jsonschema>=4.23.0",
   "pyyaml>=6.0.0",
-  "questionary>=2.0.0",
   "rich>=13.0.0",
 ]
 
