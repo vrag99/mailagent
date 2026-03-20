@@ -1,36 +1,32 @@
+<h1 align="center">mailagent</h1>
+<p align="center"><em>Your inbox, on autopilot.</em></p>
+
 <p align="center">
-  <a href="https://github.com/vrag99/mailagent/blob/main/LICENSE"><img src="https://img.shields.io/github/license/vrag99/mailagent" alt="License"></a>
+  <a href="https://github.com/vrag99/mailagent/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="License"></a>
   <a href="https://pypi.org/project/docker-mailagent/"><img src="https://img.shields.io/pypi/v/docker-mailagent" alt="PyPI version"></a>
   <a href="https://pypi.org/project/docker-mailagent/"><img src="https://img.shields.io/pypi/pyversions/docker-mailagent" alt="Python versions"></a>
   <a href="https://ghcr.io/vrag99/mailagent"><img src="https://img.shields.io/badge/ghcr.io-vrag99%2Fmailagent-blue" alt="Docker image"></a>
 </p>
 
-<h1 align="center">mailagent</h1>
-<p align="center"><em>Your inbox, on autopilot.</em></p>
+> [!WARNING]
+> 🚧 **Under active development** — expect rough edges, breaking changes, and bugs. Contributions and issue reports welcome!
 
 LLM-powered email agent that watches Maildir inboxes, classifies mail, and executes workflows. Docker sidecar for [docker-mailserver](https://github.com/docker-mailserver/docker-mailserver).
 
 ## Features
 
-**Inboxes & Providers**
-- Multi-inbox support in one config file
-- 5 LLM providers: OpenAI, Anthropic, Gemini, OpenRouter, Groq
-- LLM-first classification with keyword fallback
-
-**Actions & Workflows**
-- 4 action types: `reply`, `ignore`, `notify`, `webhook` with composite actions
-- Smart SMTP replies with threading, IMAP sent folder sync, message flagging
-- Webhook template variables (`{{from}}`, `{{subject}}`, `{{body_truncated}}`)
-
-**Configuration**
-- Global + per-inbox blocklists and system prompts
-- Env var interpolation (`${VAR}`, `${VAR:-default}`)
-- JSON Schema autocomplete for editor-driven config authoring
-
-**Runtime**
-- inotify Maildir watching, catch-up on restart, debounce, idempotent state
-- CLI (`run`, `validate`, `test`, `schema`) with rich output
-- Docker sidecar deployment, interactive setup wizard
+- [x] Multi-inbox support with 5 LLM providers (OpenAI, Anthropic, Gemini, OpenRouter, Groq)
+- [x] LLM classification with keyword fallback
+- [x] 4 action types: `reply`, `ignore`, `notify`, `webhook` — composable
+- [x] Smart SMTP replies with threading, sent folder sync, and message flagging
+- [x] Env var interpolation, JSON Schema autocomplete, global + per-inbox config
+- [x] inotify watching, catch-up on restart, debounce, idempotent state
+- [x] CLI (`run`, `validate`, `test`, `schema`) with rich output
+- [ ] Thread awareness, and reconstruction
+- [ ] Web dashboard for monitoring and config management
+- [ ] Calendar-aware scheduling actions
+- [ ] Plugin system for custom action types
+... and more to come(based on feedback and bugs)
 
 ## Quick start
 
@@ -64,6 +60,10 @@ services:
 3. `docker compose up -d`
 
 ## CLI
+
+```bash
+pip install docker-mailagent
+```
 
 ```text
 Usage: mailagent <command> [options]
