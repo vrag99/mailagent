@@ -1,27 +1,50 @@
-# mailagent
+<p align="center">
+  <a href="https://github.com/vrag99/mailagent/blob/main/LICENSE"><img src="https://img.shields.io/github/license/vrag99/mailagent" alt="License"></a>
+  <a href="https://pypi.org/project/docker-mailagent/"><img src="https://img.shields.io/pypi/v/docker-mailagent" alt="PyPI version"></a>
+  <a href="https://pypi.org/project/docker-mailagent/"><img src="https://img.shields.io/pypi/pyversions/docker-mailagent" alt="Python versions"></a>
+  <a href="https://ghcr.io/vrag99/mailagent"><img src="https://img.shields.io/badge/ghcr.io-vrag99%2Fmailagent-blue" alt="Docker image"></a>
+</p>
 
-General-purpose agentic inbox for docker-mailserver.
+<h1 align="center">mailagent</h1>
+<p align="center"><em>Your inbox, on autopilot.</em></p>
 
-`mailagent` watches one or more Maildir inboxes, classifies incoming email with LLM providers, and executes workflows (`reply`, `ignore`, `notify`, `webhook`). It is designed to run as a sidecar container in an existing docker-mailserver stack.
+LLM-powered email agent that watches Maildir inboxes, classifies mail, and executes workflows. Docker sidecar for [docker-mailserver](https://github.com/docker-mailserver/docker-mailserver).
 
-## What you get
+## Features
 
-- Multi-inbox support in one config file (`mailagent.yml`)
-- Named provider configs (`openai`, `anthropic`, `gemini`, `openrouter`, `groq`)
+**Inboxes & Providers**
+- Multi-inbox support in one config file
+- 5 LLM providers: OpenAI, Anthropic, Gemini, OpenRouter, Groq
 - LLM-first classification with keyword fallback
-- Per-inbox workflow pipelines (first match wins)
+
+**Actions & Workflows**
+- 4 action types: `reply`, `ignore`, `notify`, `webhook` with composite actions
+- Smart SMTP replies with threading, IMAP sent folder sync, message flagging
+- Webhook template variables (`{{from}}`, `{{subject}}`, `{{body_truncated}}`)
+
+**Configuration**
+- Global + per-inbox blocklists and system prompts
+- Env var interpolation (`${VAR}`, `${VAR:-default}`)
 - JSON Schema autocomplete for editor-driven config authoring
-- CLI for daemon, validation, dry-run testing, and schema output
+
+**Runtime**
+- inotify Maildir watching, catch-up on restart, debounce, idempotent state
+- CLI (`run`, `validate`, `test`, `schema`) with rich output
+- Docker sidecar deployment, interactive setup wizard
 
 ## Quick start
 
-Use the published image with docker-mailserver:
+Setting up a **new mail server**? Follow [Path A in the setup guide](docs/setup.md#path-a-starting-from-scratch).
+
+Already running **docker-mailserver**? Follow [Path B in the setup guide](docs/setup.md#path-b-existing-docker-mailserver).
+
+Here's a taste of what the stack looks like:
 
 ```yaml
 services:
   mailserver:
     image: ghcr.io/docker-mailserver/docker-mailserver:latest
-    # ... your existing config
+    # ... your config
 
   mailagent:
     image: ghcr.io/vrag99/mailagent:latest
@@ -36,21 +59,9 @@ services:
     restart: unless-stopped
 ```
 
-Then:
-
-1. Copy `examples/mailagent.minimal.yml` to `mailagent.yml` and configure your inboxes and workflows.
-2. Create a `mailagent.env` file with the secrets referenced in your config:
-   ```env
-   GROQ_API_KEY=gsk_...
-   ANTHROPIC_API_KEY=sk-ant-...
-   MAIL_PASSWORD=your-mailbox-password
-   # Add any other ${VAR} values used in mailagent.yml
-   ```
-3. Start the stack and check logs:
-   ```bash
-   docker compose up -d
-   docker compose logs -f mailagent
-   ```
+1. Create `mailagent.yml` from the [starter template](examples/mailagent.starter.yml)
+2. Create `mailagent.env` with your API keys and secrets
+3. `docker compose up -d`
 
 ## CLI
 
@@ -68,42 +79,15 @@ Options:
   -v, --verbose        Enable debug logging
 ```
 
-Examples:
-
 ```bash
-mailagent run
-mailagent run -c ./mailagent.yml
 mailagent validate -c ./mailagent.yml
 mailagent test ./some-email.eml -c ./mailagent.yml
 mailagent schema > schema.json
 ```
 
-### `mailagent validate`
+## Schema autocomplete
 
-- Loads YAML config
-- Interpolates env vars (`${VAR}` and `${VAR:-default}`)
-- Validates against `schema.json`
-- Applies extra semantic checks (provider refs, fallback placement, duplicates)
-- Warns when maildir paths are missing (does not fail)
-
-Returns exit code `0` on success, `1` on error.
-
-### `mailagent test <file.eml>`
-
-- Parses a single `.eml`
-- Runs classification (real LLM call if configured)
-- Prints selected workflow + action preview
-- Does not send email or call webhooks
-
-### `mailagent schema`
-
-Prints the full JSON Schema to stdout for local editor setup.
-
-## Schema-powered autocomplete
-
-Default schema file is at repo root: `schema.json`.
-
-In YAML files:
+Add to the top of your YAML file:
 
 ```yaml
 # yaml-language-server: $schema=https://raw.githubusercontent.com/vrag99/mailagent/main/schema.json
@@ -119,110 +103,20 @@ VS Code mapping:
 }
 ```
 
-## Configuration model
+## Configuration
 
-Top-level sections:
+mailagent is configured via a single `mailagent.yml` file with four top-level sections: `providers`, `defaults`, `inboxes`, and `settings`. Workflows are inbox-local and evaluated in order (first match wins).
 
-- `providers`: named provider configs
-- `defaults`: default providers, prompt, blocklist
-- `inboxes`: per-inbox credentials + workflows
-- `settings`: runtime behavior
+See the full [configuration reference](docs/configuration.md) and [examples](examples/).
 
-Key behavior:
-
-- Workflows are inbox-local and evaluated in order
-- `match.intent: default` is catch-all fallback
-- `keywords.any` / `keywords.all` are fallback matcher if LLM fails
-- Global + inbox blocklists are merged
-- Global + inbox system prompts are merged
-
-See full examples:
-
-- `examples/mailagent.yml`
-- `examples/mailagent.minimal.yml`
-- `examples/docker-compose.yml`
-
-Sample addresses in examples use `you@example.com`.
-
-## Build and run locally
+## Development
 
 ```bash
 pip install -e .
-mailagent validate -c ./examples/mailagent.minimal.yml
-```
-
-Docker build:
-
-```bash
+pytest -q
 docker build -t mailagent/mailagent:local .
 ```
 
-## Testing
+## License
 
-Run unit tests:
-
-```bash
-pytest -q
-```
-
-Test coverage includes:
-
-- config loading + schema validation
-- provider adapters + retry/timeout paths
-- parser fixtures (plain/html/multipart/non-utf8/mailing-list)
-- classifier fallback behavior
-- workflows execution behavior (dry-run and delivery path)
-- watcher event routing
-- state idempotency and pruning
-
-## Project structure
-
-```text
-mailagent/
-├── Dockerfile
-├── pyproject.toml
-├── README.md
-├── schema.json
-├── examples/
-│   ├── mailagent.yml
-│   ├── mailagent.minimal.yml
-│   └── docker-compose.yml
-├── src/
-│   └── mailagent/
-│       ├── __init__.py
-│       ├── cli.py
-│       ├── config.py
-│       ├── watcher.py
-│       ├── parser.py
-│       ├── classifier.py
-│       ├── workflows.py
-│       ├── mailer.py
-│       ├── state.py
-│       ├── schema.json
-│       ├── providers/
-│       │   ├── __init__.py
-│       │   ├── openai.py
-│       │   ├── anthropic.py
-│       │   ├── gemini.py
-│       │   ├── openrouter.py
-│       │   └── groq.py
-│       └── utils/
-│           ├── __init__.py
-│           ├── logging.py
-│           └── env.py
-└── tests/
-    ├── conftest.py
-    ├── fixtures/
-    │   ├── plain_text.eml
-    │   ├── html_only.eml
-    │   ├── multipart.eml
-    │   ├── non_utf8.eml
-    │   └── mailing_list.eml
-    ├── test_config.py
-    ├── test_parser.py
-    ├── test_classifier.py
-    ├── test_workflows.py
-    ├── test_providers.py
-    ├── test_state.py
-    └── test_watcher.py
-```
+[MIT](LICENSE)
