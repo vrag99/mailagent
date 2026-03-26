@@ -62,7 +62,7 @@ services:
 ## CLI
 
 ```bash
-pip install docker-mailagent
+uv pip install docker-mailagent
 ```
 
 ```text
@@ -112,8 +112,8 @@ See the full [configuration reference](docs/configuration.md) and [examples](exa
 ## Development
 
 ```bash
-pip install -e .
-pytest -q
+uv sync --dev
+uv run pytest -q
 docker build -t mailagent/mailagent:local .
 ```
 
