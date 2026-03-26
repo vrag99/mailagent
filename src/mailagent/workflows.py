@@ -10,6 +10,7 @@ from . import mailer
 from .config import Config, InboxConfig, Workflow, WorkflowAction
 from .parser import ParsedEmail
 from .providers import BaseProvider
+from .state import ThreadContext, ThreadState
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +24,8 @@ def execute(
     config: Config,
     reply_provider: BaseProvider,
     dry_run: bool = False,
+    thread_ctx: ThreadContext | None = None,
+    thread_state: ThreadState | None = None,
 ) -> dict[str, Any]:
     workflow = _find_workflow(inbox.workflows, workflow_name)
     if workflow is None:
@@ -48,7 +51,8 @@ def execute(
 
     if action.type == "reply":
         result = _perform_reply(
-            workflow, parsed_email, inbox, config, reply_provider, dry_run=dry_run
+            workflow, parsed_email, inbox, config, reply_provider, dry_run=dry_run,
+            thread_ctx=thread_ctx, thread_state=thread_state,
         )
         preview.update(result)
         if action.also_webhook and action.webhook_url:
@@ -81,6 +85,8 @@ def execute(
                     reply_provider,
                     dry_run=dry_run,
                     override_prompt=action.prompt,
+                    thread_ctx=thread_ctx,
+                    thread_state=thread_state,
                 )
         return preview
 
@@ -104,8 +110,10 @@ def _perform_reply(
     reply_provider: BaseProvider,
     dry_run: bool,
     override_prompt: str | None = None,
+    thread_ctx: ThreadContext | None = None,
+    thread_state: ThreadState | None = None,
 ) -> dict[str, Any]:
-    block_reason = _block_reason(parsed_email, inbox)
+    block_reason = _block_reason(parsed_email, inbox, thread_ctx, config)
     if block_reason:
         logger.info(
             "Reply blocked (%s): from=%s subject=%r",
@@ -120,7 +128,31 @@ def _perform_reply(
         logger.warning("Reply workflow %r has no prompt", workflow.name)
         return {"ok": False, "reason": "missing_prompt"}
 
-    context_prompt = (
+    context_prompt = ""
+
+    # Add thread history when replying to own thread
+    if thread_ctx and thread_ctx.is_reply_to_own:
+        if thread_ctx.prior_messages is None:
+            thread_ctx.prior_messages = mailer.fetch_thread_messages(
+                references=parsed_email.references,
+                mail_host=config.settings.mail_host,
+                inbox_address=inbox.address,
+                password=inbox.credentials["password"],
+                max_messages=config.settings.thread_history_max,
+            )
+        if thread_ctx.prior_messages:
+            history_parts = ["Previous messages in this thread (oldest first):\n"]
+            for i, msg in enumerate(thread_ctx.prior_messages, 1):
+                history_parts.append(
+                    f"[{i}] From: {msg.from_addr} ({msg.date})\n{msg.body_snippet}\n"
+                )
+            history_text = "\n".join(history_parts)
+            # Cap thread history at configured limit
+            if len(history_text) > config.settings.thread_context_limit:
+                history_text = history_text[: config.settings.thread_context_limit] + "\n[...truncated]"
+            context_prompt += history_text + "\nYou are replying to the latest message above.\n"
+
+    context_prompt += (
         "You are replying to this email.\n"
         f"From: {parsed_email.from_addr}\n"
         f"Subject: {parsed_email.subject}\n"
@@ -169,6 +201,10 @@ def _perform_reply(
             "Failed to send/save/flag reply for workflow %s: %s", workflow.name, exc
         )
         return {"ok": False, "reason": "reply_delivery_failed", "error": str(exc)}
+
+    # Record outgoing Message-ID for thread tracking
+    if thread_state and reply_msg.get("Message-ID"):
+        thread_state.record_sent(reply_msg["Message-ID"], parsed_email.message_id)
 
     logger.info("Replied to %r from %s", parsed_email.subject, parsed_email.from_addr)
     return {"ok": True, "blocked": False, "replied": True}
@@ -265,9 +301,19 @@ def _find_workflow(workflows: list[Workflow], workflow_name: str) -> Workflow | 
     return None
 
 
-def _block_reason(parsed_email: ParsedEmail, inbox: InboxConfig) -> str | None:
+def _block_reason(
+    parsed_email: ParsedEmail,
+    inbox: InboxConfig,
+    thread_ctx: ThreadContext | None = None,
+    config: Config | None = None,
+) -> str | None:
     if parsed_email.from_email.lower() == inbox.address.lower():
         return "self_address"
+
+    if thread_ctx and config:
+        max_replies = config.settings.max_thread_replies
+        if thread_ctx.depth >= max_replies:
+            return "thread_depth_exceeded"
 
     blocklist = inbox.blocklist
     if not blocklist:

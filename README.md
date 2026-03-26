@@ -22,7 +22,7 @@ LLM-powered email agent that watches Maildir inboxes, classifies mail, and execu
 - [x] Env var interpolation, JSON Schema autocomplete, global + per-inbox config
 - [x] inotify watching, catch-up on restart, debounce, idempotent state
 - [x] CLI (`run`, `validate`, `test`, `schema`) with rich output
-- [ ] Thread awareness, and reconstruction
+- [x] Thread awareness
 - [ ] Web dashboard for monitoring and config management
 - [ ] Calendar-aware scheduling actions
 - [ ] Plugin system for custom action types
@@ -62,7 +62,7 @@ services:
 ## CLI
 
 ```bash
-pip install docker-mailagent
+uv pip install docker-mailagent
 ```
 
 ```text
@@ -112,8 +112,8 @@ See the full [configuration reference](docs/configuration.md) and [examples](exa
 ## Development
 
 ```bash
-pip install -e .
-pytest -q
+uv sync --dev
+uv run pytest -q
 docker build -t mailagent/mailagent:local .
 ```
 

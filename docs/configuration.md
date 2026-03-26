@@ -463,6 +463,9 @@ settings:
   llm_timeout_seconds: <integer>   # default: 30
   data_dir: <string>               # default: "/app/data"
   log_level: <string>              # default: "info"
+  max_thread_replies: <integer>    # default: 3
+  thread_context_limit: <integer>  # default: 3000
+  thread_history_max: <integer>    # default: 5
 ```
 
 ### Fields
@@ -478,6 +481,9 @@ settings:
 | `llm_timeout_seconds` | integer | `30` | min: 1 | Default HTTP timeout (seconds) for LLM calls. Provider-level `timeout` overrides this. |
 | `data_dir` | string | `"/app/data"` | — | Directory for mailagent state files. |
 | `log_level` | string | `"info"` | `debug`, `info`, `warning`, `error` | Logging verbosity. |
+| `max_thread_replies` | integer | `3` | min: 0 | Maximum number of mailagent replies per email thread. 0 means never reply to thread continuations. |
+| `thread_context_limit` | integer | `3000` | min: 0 | Maximum characters of thread history included in reply prompts. |
+| `thread_history_max` | integer | `5` | min: 0 | Maximum number of prior messages to fetch via IMAP for thread context. |
 
 
 ## Complete Minimal Example

@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from .config import Workflow
 from .parser import ParsedEmail
 from .providers import BaseProvider, ProviderError
+from .state import ThreadContext
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +24,7 @@ def classify(
     workflows: list[Workflow],
     provider: BaseProvider,
     system_prompt: str,
+    thread_ctx: ThreadContext | None = None,
 ) -> ClassificationResult:
     """
     Classify an email into a workflow.
@@ -33,7 +35,7 @@ def classify(
     3. If keywords also don't match, return "fallback".
     """
     try:
-        result = _classify_llm(email, workflows, provider, system_prompt)
+        result = _classify_llm(email, workflows, provider, system_prompt, thread_ctx=thread_ctx)
         if result:
             return result
     except ProviderError as exc:
@@ -51,6 +53,7 @@ def _classify_llm(
     workflows: list[Workflow],
     provider: BaseProvider,
     system_prompt: str,
+    thread_ctx: ThreadContext | None = None,
 ) -> ClassificationResult | None:
     candidates = [wf for wf in workflows if wf.match.intent.lower() != "default"]
     if not candidates:
@@ -75,6 +78,13 @@ def _classify_llm(
         f"Subject: {email.subject}\n"
         f"Body:\n{email.body_truncated}"
     )
+
+    if thread_ctx and thread_ctx.is_reply_to_own:
+        classify_user += (
+            f"\n\n[Thread context: This is a reply to a message you previously sent. "
+            f"Thread depth: {thread_ctx.depth}. "
+            f"Consider whether this needs a new response or is a simple acknowledgment.]"
+        )
 
     raw = provider.classify(classify_system, classify_user)
     workflow_name, confidence = _parse_llm_response(raw)
