@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import fcntl
 import json
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -93,6 +95,9 @@ class Settings:
     max_thread_replies: int = 3
     thread_context_limit: int = 3000
     thread_history_max: int = 5
+    api_port: int = 8000
+    api_enabled: bool = True
+    dms_config_dir: str = "/app/dms-config"
 
 
 @dataclass
@@ -256,6 +261,9 @@ def _build_typed_config(
         max_thread_replies=int(settings_raw.get("max_thread_replies", 3)),
         thread_context_limit=int(settings_raw.get("thread_context_limit", 3000)),
         thread_history_max=int(settings_raw.get("thread_history_max", 5)),
+        api_port=int(settings_raw.get("api_port", 8000)),
+        api_enabled=settings_raw.get("api_enabled", True),
+        dms_config_dir=settings_raw.get("dms_config_dir", "/app/dms-config"),
     )
 
     inboxes: list[InboxConfig] = []
@@ -408,3 +416,247 @@ def _merge_prompts(global_prompt: str, inbox_prompt: str | None) -> str:
     if not global_prompt:
         return inbox_prompt
     return f"{global_prompt.rstrip()}\n{inbox_prompt.lstrip()}"
+
+
+class ConfigManager:
+    """Thread-safe wrapper around Config with YAML persistence.
+
+    All reads/writes go through a lock so the watcher and API
+    threads can safely share the same config state.
+    """
+
+    def __init__(self, config: Config, config_path: str | Path, warnings: list[str] | None = None):
+        self._lock = threading.RLock()
+        self._config = config
+        self._config_path = Path(config_path)
+        self._warnings = list(warnings or [])
+
+    @property
+    def config(self) -> Config:
+        with self._lock:
+            return self._config
+
+    @property
+    def warnings(self) -> list[str]:
+        with self._lock:
+            return list(self._warnings)
+
+    def get_inbox(self, address: str) -> InboxConfig | None:
+        with self._lock:
+            address_lower = address.lower()
+            for inbox in self._config.inboxes:
+                if inbox.address.lower() == address_lower:
+                    return inbox
+            return None
+
+    def get_provider(self, name: str) -> ProviderConfig | None:
+        with self._lock:
+            return self._config.providers.get(name)
+
+    def add_inbox(self, inbox: InboxConfig) -> None:
+        with self._lock:
+            address_lower = inbox.address.lower()
+            for existing in self._config.inboxes:
+                if existing.address.lower() == address_lower:
+                    raise ConfigError(f"Inbox already exists: {inbox.address}")
+            self._config.inboxes.append(inbox)
+            self._persist()
+
+    def update_inbox(self, address: str, inbox: InboxConfig) -> None:
+        with self._lock:
+            address_lower = address.lower()
+            for i, existing in enumerate(self._config.inboxes):
+                if existing.address.lower() == address_lower:
+                    self._config.inboxes[i] = inbox
+                    self._persist()
+                    return
+            raise ConfigError(f"Inbox not found: {address}")
+
+    def remove_inbox(self, address: str) -> None:
+        with self._lock:
+            address_lower = address.lower()
+            for i, existing in enumerate(self._config.inboxes):
+                if existing.address.lower() == address_lower:
+                    self._config.inboxes.pop(i)
+                    self._persist()
+                    return
+            raise ConfigError(f"Inbox not found: {address}")
+
+    def add_provider(self, name: str, provider: ProviderConfig) -> None:
+        with self._lock:
+            if name in self._config.providers:
+                raise ConfigError(f"Provider already exists: {name}")
+            self._config.providers[name] = provider
+            self._persist()
+
+    def update_provider(self, name: str, provider: ProviderConfig) -> None:
+        with self._lock:
+            if name not in self._config.providers:
+                raise ConfigError(f"Provider not found: {name}")
+            self._config.providers[name] = provider
+            self._persist()
+
+    def remove_provider(self, name: str) -> None:
+        with self._lock:
+            if name not in self._config.providers:
+                raise ConfigError(f"Provider not found: {name}")
+            # Check if any inbox references this provider
+            for inbox in self._config.inboxes:
+                if inbox.classify_provider == name or inbox.reply_provider == name:
+                    raise ConfigError(
+                        f"Cannot remove provider '{name}': still referenced by inbox '{inbox.address}'"
+                    )
+            if self._config.defaults.classify_provider == name:
+                raise ConfigError(f"Cannot remove provider '{name}': used as default classify_provider")
+            if self._config.defaults.reply_provider == name:
+                raise ConfigError(f"Cannot remove provider '{name}': used as default reply_provider")
+            del self._config.providers[name]
+            self._persist()
+
+    def _persist(self) -> None:
+        """Write current config state back to YAML with file locking."""
+        raw = _config_to_raw(self._config)
+        yaml_str = yaml.dump(raw, default_flow_style=False, sort_keys=False, allow_unicode=True)
+        with open(self._config_path, "w", encoding="utf-8") as f:
+            fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+            try:
+                f.write(yaml_str)
+            finally:
+                fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+
+
+def _config_to_raw(config: Config) -> dict[str, Any]:
+    """Serialize a Config back to the raw dict format for YAML output."""
+    providers: dict[str, Any] = {}
+    for name, p in config.providers.items():
+        entry: dict[str, Any] = {"type": p.type, "model": p.model, "api_key": p.api_key}
+        if p.base_url:
+            entry["base_url"] = p.base_url
+        if p.timeout != 30:
+            entry["timeout"] = p.timeout
+        if p.retries != 1:
+            entry["retries"] = p.retries
+        if p.http_referer:
+            entry["http_referer"] = p.http_referer
+        if p.x_title:
+            entry["x_title"] = p.x_title
+        providers[name] = entry
+
+    defaults: dict[str, Any] = {
+        "classify_provider": config.defaults.classify_provider,
+        "reply_provider": config.defaults.reply_provider,
+    }
+    if config.defaults.system_prompt != "You are a helpful email assistant.":
+        defaults["system_prompt"] = config.defaults.system_prompt
+    if config.defaults.blocklist.from_patterns or config.defaults.blocklist.headers:
+        bl: dict[str, Any] = {}
+        if config.defaults.blocklist.from_patterns:
+            bl["from_patterns"] = config.defaults.blocklist.from_patterns
+        if config.defaults.blocklist.headers:
+            bl["headers"] = config.defaults.blocklist.headers
+        defaults["blocklist"] = bl
+
+    inboxes: list[dict[str, Any]] = []
+    for inbox in config.inboxes:
+        entry = {
+            "address": inbox.address,
+            "credentials": dict(inbox.credentials),
+            "workflows": [_workflow_to_raw(w) for w in inbox.workflows],
+        }
+        if inbox.name:
+            entry["name"] = inbox.name
+        if inbox.classify_provider != config.defaults.classify_provider:
+            entry["classify_provider"] = inbox.classify_provider
+        if inbox.reply_provider != config.defaults.reply_provider:
+            entry["reply_provider"] = inbox.reply_provider
+        if inbox.system_prompt:
+            entry["system_prompt"] = inbox.system_prompt
+        if inbox.blocklist and (inbox.blocklist.from_patterns or inbox.blocklist.headers):
+            bl = {}
+            if inbox.blocklist.from_patterns:
+                bl["from_patterns"] = inbox.blocklist.from_patterns
+            if inbox.blocklist.headers:
+                bl["headers"] = inbox.blocklist.headers
+            entry["blocklist"] = bl
+        inboxes.append(entry)
+
+    raw: dict[str, Any] = {
+        "providers": providers,
+        "defaults": defaults,
+        "inboxes": inboxes,
+    }
+
+    settings = _settings_to_raw(config.settings)
+    if settings:
+        raw["settings"] = settings
+
+    return raw
+
+
+def _workflow_to_raw(w: Workflow) -> dict[str, Any]:
+    match: dict[str, Any] = {"intent": w.match.intent}
+    if w.match.keywords:
+        kw: dict[str, Any] = {}
+        if w.match.keywords.any:
+            kw["any"] = w.match.keywords.any
+        if w.match.keywords.all:
+            kw["all"] = w.match.keywords.all
+        match["keywords"] = kw
+
+    action: dict[str, Any] = {"type": w.action.type}
+    if w.action.prompt:
+        action["prompt"] = w.action.prompt
+    if w.action.webhook:
+        action["webhook"] = w.action.webhook
+    if w.action.url:
+        action["url"] = w.action.url
+    if w.action.method != "POST":
+        action["method"] = w.action.method
+    if w.action.headers:
+        action["headers"] = w.action.headers
+    if w.action.payload:
+        action["payload"] = w.action.payload
+    if w.action.also_reply:
+        action["also_reply"] = True
+    if w.action.also_webhook:
+        action["also_webhook"] = True
+    if w.action.webhook_url:
+        action["webhook_url"] = w.action.webhook_url
+
+    return {"name": w.name, "match": match, "action": action}
+
+
+def _settings_to_raw(s: Settings) -> dict[str, Any]:
+    raw: dict[str, Any] = {}
+    defaults = Settings()
+    if s.catch_up_on_start != defaults.catch_up_on_start:
+        raw["catch_up_on_start"] = s.catch_up_on_start
+    if s.debounce_ms != defaults.debounce_ms:
+        raw["debounce_ms"] = s.debounce_ms
+    if s.classify_body_limit != defaults.classify_body_limit:
+        raw["classify_body_limit"] = s.classify_body_limit
+    if s.reply_body_limit != defaults.reply_body_limit:
+        raw["reply_body_limit"] = s.reply_body_limit
+    if s.llm_retries != defaults.llm_retries:
+        raw["llm_retries"] = s.llm_retries
+    if s.llm_timeout_seconds != defaults.llm_timeout_seconds:
+        raw["llm_timeout_seconds"] = s.llm_timeout_seconds
+    if s.data_dir != defaults.data_dir:
+        raw["data_dir"] = s.data_dir
+    if s.log_level != defaults.log_level:
+        raw["log_level"] = s.log_level
+    if s.mail_host != defaults.mail_host:
+        raw["mail_host"] = s.mail_host
+    if s.max_thread_replies != defaults.max_thread_replies:
+        raw["max_thread_replies"] = s.max_thread_replies
+    if s.thread_context_limit != defaults.thread_context_limit:
+        raw["thread_context_limit"] = s.thread_context_limit
+    if s.thread_history_max != defaults.thread_history_max:
+        raw["thread_history_max"] = s.thread_history_max
+    if s.api_port != defaults.api_port:
+        raw["api_port"] = s.api_port
+    if s.api_enabled != defaults.api_enabled:
+        raw["api_enabled"] = s.api_enabled
+    if s.dms_config_dir != defaults.dms_config_dir:
+        raw["dms_config_dir"] = s.dms_config_dir
+    return raw

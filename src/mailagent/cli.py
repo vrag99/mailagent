@@ -6,13 +6,14 @@ import json
 import logging
 import os
 import sys
+import threading
 import time
 from pathlib import Path
 
 from rich.console import Console
 
 from .classifier import classify
-from .config import ConfigError, load_config, schema_text
+from .config import ConfigError, ConfigManager, load_config, schema_text
 from .parser import parse
 from .watcher import build_provider, maildir_new_path, run as run_watcher
 from .workflows import execute
@@ -58,7 +59,16 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_test_eml(Path(subcommand), config_path, verbose)
 
     if command == "run":
-        return _cmd_run(config_path, verbose)
+        api_port = getattr(args, "api_port", 8000)
+        no_api = getattr(args, "no_api", False)
+        api_keys = getattr(args, "api_keys", None)
+        dms_config = getattr(args, "dms_config", None)
+        return _cmd_run(config_path, verbose, api_port=api_port, no_api=no_api,
+                        api_keys_path=api_keys, dms_config_dir=dms_config)
+
+    if command == "api-key":
+        api_keys = getattr(args, "api_keys", None)
+        return _cmd_api_key(args, api_keys)
 
     parser.error(f"Unknown command: {command}")
     return 2
@@ -78,10 +88,40 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     subparsers = parser.add_subparsers(dest="command")
 
-    subparsers.add_parser("run", parents=[common], help="Start the mail agent daemon")
+    run_parser = subparsers.add_parser("run", parents=[common], help="Start the mail agent daemon")
+    run_parser.add_argument(
+        "--api-port", type=int, default=8000, help="REST API port (default: 8000)"
+    )
+    run_parser.add_argument(
+        "--no-api", action="store_true", help="Disable the REST API server"
+    )
+    run_parser.add_argument(
+        "--api-keys", default=None, help="Path to API keys file (default: <data_dir>/api-keys.yml)"
+    )
+    run_parser.add_argument(
+        "--dms-config", default=None, help="Path to docker-mailserver config dir for inbox provisioning"
+    )
+
     subparsers.add_parser(
         "validate", parents=[common], help="Validate the config file and exit"
     )
+
+    # ── api-key command ──
+    apikey_parser = subparsers.add_parser(
+        "api-key", help="Manage API keys"
+    )
+    apikey_parser.add_argument(
+        "--api-keys", default=None, help="Path to API keys file"
+    )
+    apikey_sub = apikey_parser.add_subparsers(dest="apikey_command")
+
+    create_key_parser = apikey_sub.add_parser("create", help="Create a new API key")
+    create_key_parser.add_argument("--name", default="default", help="Name for the API key")
+
+    apikey_sub.add_parser("list", help="List existing API keys")
+
+    revoke_key_parser = apikey_sub.add_parser("revoke", help="Revoke an API key")
+    revoke_key_parser.add_argument("hash_prefix", help="Hash prefix of the key to revoke (from list output)")
 
     # ── test command with subcommands ──
     test_parser = subparsers.add_parser(
@@ -144,7 +184,14 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _cmd_run(config_path: str, verbose: bool) -> int:
+def _cmd_run(
+    config_path: str,
+    verbose: bool,
+    api_port: int = 8000,
+    no_api: bool = False,
+    api_keys_path: str | None = None,
+    dms_config_dir: str | None = None,
+) -> int:
     err = Console(stderr=True)
     try:
         load_result = load_config(config_path)
@@ -160,16 +207,128 @@ def _cmd_run(config_path: str, verbose: bool) -> int:
     for warning in load_result.warnings:
         logger.warning(warning)
 
+    config_manager = ConfigManager(
+        config=load_result.config,
+        config_path=config_path,
+        warnings=load_result.warnings,
+    )
+
+    settings = load_result.config.settings
+    if api_port == 8000:
+        api_port = settings.api_port
+    if not no_api:
+        no_api = not settings.api_enabled
+    if dms_config_dir is None:
+        dms_config_dir = settings.dms_config_dir
+
+    stop_event = threading.Event()
+
+    # Start API server thread
+    api_thread = None
+    if not no_api:
+        api_thread = threading.Thread(
+            target=_run_api,
+            args=(config_manager, api_port, api_keys_path, dms_config_dir, stop_event),
+            daemon=True,
+            name="api-server",
+        )
+        api_thread.start()
+        logger.info("REST API server started on port %d", api_port)
+
+    # Run watcher in main thread with restart loop
     while True:
         try:
-            run_watcher(load_result.config)
+            run_watcher(config_manager.config, stop_event=stop_event)
             return 0
         except KeyboardInterrupt:
             logger.info("Interrupted, exiting")
+            stop_event.set()
             return 0
         except Exception as exc:
+            if stop_event.is_set():
+                return 0
             logger.exception("Watcher crashed: %s; restarting in 5s", exc)
             time.sleep(5)
+
+
+def _run_api(
+    config_manager: ConfigManager,
+    port: int,
+    api_keys_path: str | None,
+    dms_config_dir: str | None,
+    stop_event: threading.Event,
+) -> None:
+    import uvicorn
+
+    from .api import create_app
+    from .provisioner import Provisioner
+
+    app = create_app(config_manager, api_keys_path=api_keys_path)
+
+    # Attach provisioner if dms config dir is available
+    if dms_config_dir:
+        provisioner = Provisioner(dms_config_dir)
+        if provisioner.available:
+            app.state.provisioner = provisioner
+            logger.info("Inbox provisioning enabled (dms config: %s)", dms_config_dir)
+    else:
+        # Try default path
+        provisioner = Provisioner()
+        if provisioner.available:
+            app.state.provisioner = provisioner
+            logger.info("Inbox provisioning enabled (default path)")
+
+    config = uvicorn.Config(app, host="0.0.0.0", port=port, log_level="warning")
+    server = uvicorn.Server(config)
+
+    # Override uvicorn's signal handling since we manage shutdown via stop_event
+    server.install_signal_handlers = lambda: None
+
+    # Run in a thread that checks stop_event
+    def _watch_stop():
+        stop_event.wait()
+        server.should_exit = True
+
+    watcher = threading.Thread(target=_watch_stop, daemon=True, name="api-stop-watcher")
+    watcher.start()
+
+    server.run()
+
+
+def _cmd_api_key(args: argparse.Namespace, api_keys_path: str | None) -> int:
+    from .api.auth import create_api_key, list_api_keys, revoke_api_key
+
+    subcmd = getattr(args, "apikey_command", None)
+    if subcmd is None:
+        Console(stderr=True).print("[red]Usage:[/] mailagent api-key {create|list|revoke}")
+        return 2
+
+    if subcmd == "create":
+        name = getattr(args, "name", "default")
+        key = create_api_key(api_keys_path=api_keys_path, name=name)
+        console.print(f"[green]API key created:[/] {key}")
+        console.print("[yellow]Save this key — it cannot be retrieved later.[/]")
+        return 0
+
+    if subcmd == "list":
+        keys = list_api_keys(api_keys_path=api_keys_path)
+        if not keys:
+            console.print("No API keys found.")
+            return 0
+        for k in keys:
+            console.print(f"  {k['hash_prefix']}…  {k['name']}  (created: {k['created_at']})")
+        return 0
+
+    if subcmd == "revoke":
+        prefix = args.hash_prefix
+        if revoke_api_key(prefix, api_keys_path=api_keys_path):
+            console.print(f"[green]Revoked key matching prefix:[/] {prefix}")
+            return 0
+        else:
+            console.print(f"[red]No key found matching prefix:[/] {prefix}")
+            return 1
+
+    return 2
 
 
 def _cmd_validate(config_path: str, verbose: bool) -> int:

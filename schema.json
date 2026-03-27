@@ -516,6 +516,23 @@
           "description": "Maximum number of prior messages to fetch via IMAP for thread context.",
           "minimum": 0,
           "default": 5
+        },
+        "api_port": {
+          "type": "integer",
+          "description": "Port for the embedded REST API server.",
+          "minimum": 1,
+          "maximum": 65535,
+          "default": 8000
+        },
+        "api_enabled": {
+          "type": "boolean",
+          "description": "Enable or disable the embedded REST API server.",
+          "default": true
+        },
+        "dms_config_dir": {
+          "type": "string",
+          "description": "Path to docker-mailserver config directory for inbox provisioning. Set to enable automatic mailbox creation.",
+          "default": "/app/dms-config"
         }
       }
     }

@@ -52,10 +52,13 @@ services:
     image: ghcr.io/vrag99/mailagent:latest
     container_name: mailagent
     env_file: mailagent.env
+    ports:
+      - "8000:8000"  # REST API
     volumes:
       - ./docker-data/dms/mail-data/:/var/mail/:ro
-      - ./mailagent.yml:/app/config.yml:ro
+      - ./mailagent.yml:/app/config.yml
       - ./mailagent-data/:/app/data/
+      - ./docker-data/dms/config/:/app/dms-config/
     depends_on:
       mailserver:
         condition: service_healthy

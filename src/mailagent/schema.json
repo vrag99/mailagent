@@ -403,6 +403,11 @@
         "address": {
           "$ref": "#/$defs/emailAddress"
         },
+        "name": {
+          "type": "string",
+          "description": "Display name for this inbox, e.g. 'Jane Doe'. Used as the From name when sending replies.",
+          "minLength": 1
+        },
         "classify_provider": {
           "type": "string",
           "description": "Optional override of defaults.classify_provider for this inbox.",
@@ -493,6 +498,41 @@
           "type": "string",
           "description": "SMTP/IMAP hostname used when sending replies and syncing Sent/Answered flags.",
           "default": "mailserver"
+        },
+        "max_thread_replies": {
+          "type": "integer",
+          "description": "Maximum number of mailagent replies per email thread. 0 means never reply to thread continuations.",
+          "minimum": 0,
+          "default": 3
+        },
+        "thread_context_limit": {
+          "type": "integer",
+          "description": "Maximum characters of thread history included in reply prompts.",
+          "minimum": 0,
+          "default": 3000
+        },
+        "thread_history_max": {
+          "type": "integer",
+          "description": "Maximum number of prior messages to fetch via IMAP for thread context.",
+          "minimum": 0,
+          "default": 5
+        },
+        "api_port": {
+          "type": "integer",
+          "description": "Port for the embedded REST API server.",
+          "minimum": 1,
+          "maximum": 65535,
+          "default": 8000
+        },
+        "api_enabled": {
+          "type": "boolean",
+          "description": "Enable or disable the embedded REST API server.",
+          "default": true
+        },
+        "dms_config_dir": {
+          "type": "string",
+          "description": "Path to docker-mailserver config directory for inbox provisioning. Set to enable automatic mailbox creation.",
+          "default": "/app/dms-config"
         }
       }
     }
