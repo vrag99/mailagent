@@ -34,7 +34,11 @@ def run(config: Config, stop_event: threading.Event | None = None) -> None:
     for inbox in config.inboxes:
         watch_path = maildir_new_path(inbox.address)
         if not watch_path.exists():
-            logger.error("Maildir not found for %s: %s", inbox.address, watch_path)
+            logger.warning(
+                "Maildir not found for %s: %s — skipping (no email has arrived yet?)",
+                inbox.address,
+                watch_path,
+            )
             continue
 
         thread_state = ThreadState(config.settings.data_dir, inbox.address)
@@ -59,8 +63,7 @@ def run(config: Config, stop_event: threading.Event | None = None) -> None:
         logger.info("Watching %s at %s", inbox.address, watch_path)
 
     if not wd_to_runtime:
-        logger.error("No valid inbox watch paths were configured")
-        return
+        logger.warning("No inbox watch paths are active; daemon is idle")
 
     if config.settings.catch_up_on_start:
         for runtime in wd_to_runtime.values():
