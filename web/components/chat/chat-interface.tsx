@@ -33,7 +33,7 @@ export function ChatInterface() {
     const inboxInfo = inboxList
       ?.map(
         (i) =>
-          `- ${i.address}${i.name ? ` (${i.name})` : ""}: ${i.workflows.length} workflows [${i.workflows.map((w) => w.name).join(", ")}]`,
+          `- ${i.address}${i.name ? ` (${i.name})` : ""}: ${(i.workflows ?? []).length} workflows [${(i.workflows ?? []).map((w) => w.name).join(", ")}]`,
       )
       .join("\n");
 

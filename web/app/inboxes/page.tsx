@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { CreateInboxDialog } from "@/components/inboxes/create-inbox-dialog";
 import { DeleteInboxDialog } from "@/components/inboxes/delete-inbox-dialog";
-import type { Inbox } from "@/lib/types";
+import type { Inbox } from "@/lib/api-client";
 
 export default function InboxesPage() {
   const { data: inboxList, loading, error, refetch } = useApi(() => inboxes.list());
@@ -92,8 +92,8 @@ export default function InboxesPage() {
                     <Badge variant="outline">{inbox.reply_provider}</Badge>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    {inbox.workflows.length} workflow
-                    {inbox.workflows.length !== 1 ? "s" : ""}
+                    {(inbox.workflows ?? []).length} workflow
+                    {(inbox.workflows ?? []).length !== 1 ? "s" : ""}
                   </p>
                 </CardContent>
               </Link>

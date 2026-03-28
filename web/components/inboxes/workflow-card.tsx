@@ -13,7 +13,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { workflows as workflowsApi } from "@/lib/api-client";
-import type { Workflow } from "@/lib/types";
+import type { Workflow } from "@/lib/api-client";
 import { toast } from "sonner";
 
 interface WorkflowCardProps {

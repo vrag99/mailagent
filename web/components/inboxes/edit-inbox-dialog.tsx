@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { inboxes } from "@/lib/api-client";
-import type { Inbox } from "@/lib/types";
+import type { Inbox } from "@/lib/api-client";
 import { toast } from "sonner";
 
 interface EditInboxDialogProps {

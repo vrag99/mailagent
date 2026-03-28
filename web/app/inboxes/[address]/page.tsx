@@ -93,14 +93,14 @@ export default function InboxDetailPage() {
         <TabsContent value="workflows" className="space-y-4 mt-4">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-medium">
-              Workflows ({inbox.workflows.length})
+              Workflows ({(inbox.workflows ?? []).length})
             </h2>
             <Button size="sm" onClick={() => setCreateWfOpen(true)}>
               Add Workflow
             </Button>
           </div>
           <div className="grid gap-3">
-            {inbox.workflows.map((wf) => (
+            {(inbox.workflows ?? []).map((wf) => (
               <WorkflowCard
                 key={wf.name}
                 workflow={wf}

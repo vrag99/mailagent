@@ -1,144 +1,155 @@
+import { client } from "./sdk/client.gen";
+import {
+  healthHealthGet,
+  listInboxesApiInboxesGet,
+  getInboxApiInboxesAddressGet,
+  createInboxApiInboxesPost,
+  updateInboxApiInboxesAddressPatch,
+  deleteInboxApiInboxesAddressDelete,
+  listWorkflowsApiInboxesInboxAddressWorkflowsGet,
+  getWorkflowApiInboxesInboxAddressWorkflowsNameGet,
+  createWorkflowApiInboxesInboxAddressWorkflowsPost,
+  replaceWorkflowApiInboxesInboxAddressWorkflowsNamePut,
+  deleteWorkflowApiInboxesInboxAddressWorkflowsNameDelete,
+  listProvidersApiProvidersGet,
+  getProviderApiProvidersNameGet,
+  createProviderApiProvidersNamePost,
+  updateProviderApiProvidersNamePut,
+  deleteProviderApiProvidersNameDelete,
+  sendApiEmailsSendPost,
+} from "./sdk/sdk.gen";
 import type {
-  Inbox,
-  InboxCreateRequest,
+  InboxRequest,
   InboxUpdateRequest,
-  Provider,
+  InboxResponse,
+  WorkflowRequest,
+  WorkflowResponse,
   ProviderRequest,
+  ProviderResponse,
   SendEmailRequest,
   SendEmailResponse,
-  Workflow,
+} from "./sdk/types.gen";
+
+// Re-export types for components
+export type {
+  InboxResponse,
+  InboxRequest,
+  InboxUpdateRequest,
   WorkflowRequest,
-} from "./types";
+  WorkflowResponse,
+  ProviderRequest,
+  ProviderResponse,
+  SendEmailRequest,
+  SendEmailResponse,
+};
 
-class ApiError extends Error {
-  constructor(
-    public status: number,
-    public detail: string,
-  ) {
-    super(detail);
-    this.name = "ApiError";
-  }
-}
+// Type alias for backwards compat
+export type Inbox = InboxResponse;
+export type Workflow = WorkflowResponse;
+export type Provider = ProviderResponse;
 
-function getBaseUrl(): string {
-  if (typeof window !== "undefined") {
-    return localStorage.getItem("mailagent_api_url") || "/api";
-  }
-  return process.env.NEXT_PUBLIC_API_URL || "/api";
-}
+export function configureClient() {
+  const baseUrl =
+    typeof window !== "undefined"
+      ? localStorage.getItem("mailagent_api_url") || "/api"
+      : process.env.NEXT_PUBLIC_API_URL || "/api";
 
-function getApiKey(): string | null {
-  if (typeof window !== "undefined") {
-    return localStorage.getItem("mailagent_api_key");
-  }
-  return null;
-}
+  const apiKey =
+    typeof window !== "undefined"
+      ? localStorage.getItem("mailagent_api_key")
+      : null;
 
-async function request<T>(
-  path: string,
-  options: RequestInit = {},
-): Promise<T> {
-  const baseUrl = getBaseUrl();
-  const apiKey = getApiKey();
-
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    ...(options.headers as Record<string, string>),
-  };
+  client.setConfig({ baseUrl });
 
   if (apiKey) {
-    headers["Authorization"] = `Bearer ${apiKey}`;
+    client.interceptors.request.use((request) => {
+      request.headers.set("Authorization", `Bearer ${apiKey}`);
+      return request;
+    });
   }
+}
 
-  const res = await fetch(`${baseUrl}${path}`, {
-    ...options,
-    headers,
-  });
+// Configure on import
+if (typeof window !== "undefined") {
+  configureClient();
+}
 
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new ApiError(res.status, body.detail || res.statusText);
+async function unwrap<T>(promise: Promise<{ data?: T; error?: unknown }>): Promise<T> {
+  const { data, error } = await promise;
+  if (error) {
+    const detail = (error as { detail?: string })?.detail || "Request failed";
+    throw new Error(detail);
   }
-
-  if (res.status === 204) {
-    return undefined as T;
-  }
-
-  return res.json();
+  return data as T;
 }
 
 // Inboxes
 export const inboxes = {
-  list: () => request<Inbox[]>("/inboxes"),
-  get: (address: string) => request<Inbox>(`/inboxes/${encodeURIComponent(address)}`),
-  create: (data: InboxCreateRequest) =>
-    request<Inbox>("/inboxes", { method: "POST", body: JSON.stringify(data) }),
-  update: (address: string, data: InboxUpdateRequest) =>
-    request<Inbox>(`/inboxes/${encodeURIComponent(address)}`, {
-      method: "PATCH",
-      body: JSON.stringify(data),
-    }),
+  list: () => unwrap<InboxResponse[]>(listInboxesApiInboxesGet()),
+  get: (address: string) =>
+    unwrap<InboxResponse>(getInboxApiInboxesAddressGet({ path: { address } })),
+  create: (body: InboxRequest) =>
+    unwrap<InboxResponse>(createInboxApiInboxesPost({ body })),
+  update: (address: string, body: InboxUpdateRequest) =>
+    unwrap<InboxResponse>(updateInboxApiInboxesAddressPatch({ path: { address }, body })),
   delete: (address: string) =>
-    request<void>(`/inboxes/${encodeURIComponent(address)}`, { method: "DELETE" }),
+    unwrap<void>(deleteInboxApiInboxesAddressDelete({ path: { address } })),
 };
 
 // Workflows
 export const workflows = {
   list: (inboxAddress: string) =>
-    request<Workflow[]>(
-      `/inboxes/${encodeURIComponent(inboxAddress)}/workflows`,
+    unwrap<WorkflowResponse[]>(
+      listWorkflowsApiInboxesInboxAddressWorkflowsGet({ path: { inbox_address: inboxAddress } }),
     ),
   get: (inboxAddress: string, name: string) =>
-    request<Workflow>(
-      `/inboxes/${encodeURIComponent(inboxAddress)}/workflows/${encodeURIComponent(name)}`,
+    unwrap<WorkflowResponse>(
+      getWorkflowApiInboxesInboxAddressWorkflowsNameGet({
+        path: { inbox_address: inboxAddress, name },
+      }),
     ),
-  create: (inboxAddress: string, data: WorkflowRequest) =>
-    request<Workflow>(
-      `/inboxes/${encodeURIComponent(inboxAddress)}/workflows`,
-      { method: "POST", body: JSON.stringify(data) },
+  create: (inboxAddress: string, body: WorkflowRequest) =>
+    unwrap<WorkflowResponse>(
+      createWorkflowApiInboxesInboxAddressWorkflowsPost({
+        path: { inbox_address: inboxAddress },
+        body,
+      }),
     ),
-  replace: (inboxAddress: string, name: string, data: WorkflowRequest) =>
-    request<Workflow>(
-      `/inboxes/${encodeURIComponent(inboxAddress)}/workflows/${encodeURIComponent(name)}`,
-      { method: "PUT", body: JSON.stringify(data) },
+  replace: (inboxAddress: string, name: string, body: WorkflowRequest) =>
+    unwrap<WorkflowResponse>(
+      replaceWorkflowApiInboxesInboxAddressWorkflowsNamePut({
+        path: { inbox_address: inboxAddress, name },
+        body,
+      }),
     ),
   delete: (inboxAddress: string, name: string) =>
-    request<void>(
-      `/inboxes/${encodeURIComponent(inboxAddress)}/workflows/${encodeURIComponent(name)}`,
-      { method: "DELETE" },
+    unwrap<void>(
+      deleteWorkflowApiInboxesInboxAddressWorkflowsNameDelete({
+        path: { inbox_address: inboxAddress, name },
+      }),
     ),
 };
 
 // Providers
 export const providers = {
-  list: () => request<Provider[]>("/providers"),
-  get: (name: string) => request<Provider>(`/providers/${encodeURIComponent(name)}`),
-  create: (name: string, data: ProviderRequest) =>
-    request<Provider>(`/providers/${encodeURIComponent(name)}`, {
-      method: "POST",
-      body: JSON.stringify(data),
-    }),
-  update: (name: string, data: ProviderRequest) =>
-    request<Provider>(`/providers/${encodeURIComponent(name)}`, {
-      method: "PUT",
-      body: JSON.stringify(data),
-    }),
+  list: () => unwrap<ProviderResponse[]>(listProvidersApiProvidersGet()),
+  get: (name: string) =>
+    unwrap<ProviderResponse>(getProviderApiProvidersNameGet({ path: { name } })),
+  create: (name: string, body: ProviderRequest) =>
+    unwrap<ProviderResponse>(createProviderApiProvidersNamePost({ path: { name }, body })),
+  update: (name: string, body: ProviderRequest) =>
+    unwrap<ProviderResponse>(updateProviderApiProvidersNamePut({ path: { name }, body })),
   delete: (name: string) =>
-    request<void>(`/providers/${encodeURIComponent(name)}`, { method: "DELETE" }),
+    unwrap<void>(deleteProviderApiProvidersNameDelete({ path: { name } })),
 };
 
 // Emails
 export const emails = {
-  send: (data: SendEmailRequest) =>
-    request<SendEmailResponse>("/emails/send", {
-      method: "POST",
-      body: JSON.stringify(data),
-    }),
+  send: (body: SendEmailRequest) =>
+    unwrap<SendEmailResponse>(sendApiEmailsSendPost({ body })),
 };
 
 // Health
 export const health = {
-  check: () => request<{ status: string }>("/health"),
+  check: () => unwrap<{ [key: string]: unknown }>(healthHealthGet()) as Promise<{ status: string }>,
 };
-
-export { ApiError };

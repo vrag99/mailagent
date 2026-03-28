@@ -61,7 +61,7 @@ export default function DashboardPage() {
             <div className="text-3xl font-bold">
               {inboxLoading
                 ? "..."
-                : inboxList?.reduce((sum, i) => sum + i.workflows.length, 0) ?? 0}
+                : inboxList?.reduce((sum, i) => sum + (i.workflows ?? []).length, 0) ?? 0}
             </div>
           </CardContent>
         </Card>
@@ -80,7 +80,7 @@ export default function DashboardPage() {
                   <CardContent>
                     <p className="text-xs text-muted-foreground">{inbox.address}</p>
                     <p className="text-xs text-muted-foreground mt-1">
-                      {inbox.workflows.length} workflow{inbox.workflows.length !== 1 ? "s" : ""}
+                      {(inbox.workflows ?? []).length} workflow{(inbox.workflows ?? []).length !== 1 ? "s" : ""}
                     </p>
                   </CardContent>
                 </Card>

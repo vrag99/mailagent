@@ -15,7 +15,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { CreateProviderDialog } from "@/components/providers/create-provider-dialog";
-import type { Provider } from "@/lib/types";
+import type { Provider } from "@/lib/api-client";
 import { toast } from "sonner";
 
 export default function ProvidersPage() {
