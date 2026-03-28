@@ -12,7 +12,7 @@ from pathlib import Path
 from rich.console import Console
 
 from .classifier import classify
-from .config import ConfigError, load_config, schema_text
+from .config import ConfigError, ConfigManager, load_config, schema_text
 from .parser import parse
 from .watcher import build_provider, maildir_new_path, run as run_watcher
 from .workflows import execute
@@ -59,6 +59,19 @@ def main(argv: list[str] | None = None) -> int:
 
     if command == "run":
         return _cmd_run(config_path, verbose)
+
+    if command == "serve":
+        return _cmd_serve(
+            config_path,
+            verbose,
+            host=getattr(args, "host", "0.0.0.0"),
+            port=getattr(args, "port", 8000),
+            api_keys_path=getattr(args, "api_keys", None),
+            dms_config_dir=getattr(args, "dms_config", None),
+        )
+
+    if command == "api-key":
+        return _cmd_api_key(args)
 
     parser.error(f"Unknown command: {command}")
     return 2
@@ -141,6 +154,41 @@ def _build_parser() -> argparse.ArgumentParser:
         "schema", parents=[common], help="Print JSON Schema to stdout"
     )
 
+    # ── serve command ──
+    serve_parser = subparsers.add_parser(
+        "serve", parents=[common], help="Start the REST API server"
+    )
+    serve_parser.add_argument(
+        "--host", default="0.0.0.0", help="Bind host (default: 0.0.0.0)"
+    )
+    serve_parser.add_argument(
+        "--port", type=int, default=8000, help="Bind port (default: 8000)"
+    )
+    serve_parser.add_argument(
+        "--api-keys", default=None, help="Path to API keys file"
+    )
+    serve_parser.add_argument(
+        "--dms-config", default=None,
+        help="Path to docker-mailserver config dir for provisioning",
+    )
+
+    # ── api-key command ──
+    apikey_parser = subparsers.add_parser(
+        "api-key", help="Manage API keys"
+    )
+    apikey_sub = apikey_parser.add_subparsers(dest="apikey_command")
+
+    create_key = apikey_sub.add_parser("create", help="Create a new API key")
+    create_key.add_argument("--name", default="default", help="Key name")
+    create_key.add_argument("--api-keys", default=None, help="Path to API keys file")
+
+    list_key = apikey_sub.add_parser("list", help="List API keys")
+    list_key.add_argument("--api-keys", default=None, help="Path to API keys file")
+
+    revoke_key = apikey_sub.add_parser("revoke", help="Revoke an API key")
+    revoke_key.add_argument("hash_prefix", help="Hash prefix of the key to revoke")
+    revoke_key.add_argument("--api-keys", default=None, help="Path to API keys file")
+
     return parser
 
 
@@ -162,7 +210,7 @@ def _cmd_run(config_path: str, verbose: bool) -> int:
 
     while True:
         try:
-            run_watcher(load_result.config)
+            run_watcher(load_result.config, config_path=config_path)
             return 0
         except KeyboardInterrupt:
             logger.info("Interrupted, exiting")
@@ -170,6 +218,91 @@ def _cmd_run(config_path: str, verbose: bool) -> int:
         except Exception as exc:
             logger.exception("Watcher crashed: %s; restarting in 5s", exc)
             time.sleep(5)
+
+
+def _cmd_serve(
+    config_path: str,
+    verbose: bool,
+    host: str = "0.0.0.0",
+    port: int = 8000,
+    api_keys_path: str | None = None,
+    dms_config_dir: str | None = None,
+) -> int:
+    err = Console(stderr=True)
+    try:
+        load_result = load_config(config_path)
+    except ConfigError as exc:
+        err.print(f"[red]Config validation failed:[/]\n{exc}")
+        return 1
+
+    setup_logging(verbose=verbose, level=load_result.config.settings.log_level)
+
+    for warning in load_result.warnings:
+        logger.warning(warning)
+
+    try:
+        import uvicorn
+    except ImportError:
+        err.print(
+            "[red]Missing API dependencies.[/] Install with: "
+            "pip install docker-mailagent[api]"
+        )
+        return 1
+
+    from .api import create_app
+    from .provisioner import Provisioner
+
+    cm = ConfigManager(load_result.config, config_path)
+
+    provisioner = None
+    if dms_config_dir:
+        provisioner = Provisioner(dms_config_dir)
+        if provisioner.available:
+            logger.info("Provisioner enabled: %s", dms_config_dir)
+        else:
+            logger.warning("DMS config dir not found: %s", dms_config_dir)
+            provisioner = None
+
+    app = create_app(cm, api_keys_path=api_keys_path, provisioner=provisioner)
+    console.print(f"[green]Starting API server on {host}:{port}[/]")
+    uvicorn.run(app, host=host, port=port, log_level="info")
+    return 0
+
+
+def _cmd_api_key(args: argparse.Namespace) -> int:
+    from .api.auth import create_api_key, list_api_keys, revoke_api_key
+
+    sub = getattr(args, "apikey_command", None)
+    api_keys_path = getattr(args, "api_keys", None)
+
+    if sub == "create":
+        key = create_api_key(api_keys_path=api_keys_path, name=args.name)
+        console.print(f"[green]API key created:[/] {key}")
+        console.print("[dim]Store this key securely — it cannot be retrieved later.[/]")
+        return 0
+
+    if sub == "list":
+        keys = list_api_keys(api_keys_path=api_keys_path)
+        if not keys:
+            console.print("[dim]No API keys found.[/]")
+            return 0
+        for k in keys:
+            console.print(
+                f"  {k['hash_prefix']}…  name={k['name']}  created={k['created_at']}"
+            )
+        return 0
+
+    if sub == "revoke":
+        ok = revoke_api_key(args.hash_prefix, api_keys_path=api_keys_path)
+        if ok:
+            console.print("[green]Key revoked.[/]")
+        else:
+            console.print("[red]No key found with that prefix.[/]")
+            return 1
+        return 0
+
+    Console(stderr=True).print("[red]Usage:[/] mailagent api-key {create|list|revoke}")
+    return 2
 
 
 def _cmd_validate(config_path: str, verbose: bool) -> int:
