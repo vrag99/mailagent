@@ -7,7 +7,7 @@ WORKDIR /app
 # Install dependencies first (cached layer)
 COPY pyproject.toml uv.lock README.md schema.json schema.test.json ./
 COPY src/ src/
-RUN cp schema.json src/mailagent/schema.json && uv sync --frozen --no-dev --no-editable
+RUN cp schema.json src/mailagent/schema.json && uv sync --frozen --no-dev --no-editable --extra api
 
 # Default config path
 ENV MAILAGENT_CONFIG=/app/config.yml

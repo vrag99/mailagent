@@ -23,6 +23,7 @@ LLM-powered email agent that watches Maildir inboxes, classifies mail, and execu
 - [x] inotify watching, catch-up on restart, debounce, idempotent state
 - [x] CLI (`run`, `validate`, `test`, `schema`) with rich output
 - [x] Thread awareness
+- [x] REST API for inbox/provider/workflow CRUD and sending emails
 - [ ] Web dashboard for monitoring and config management
 - [ ] Calendar-aware scheduling actions
 - [ ] Plugin system for custom action types
@@ -47,8 +48,23 @@ services:
     env_file: ./mailagent.env
     volumes:
       - ./docker-data/dms/mail-data/:/var/mail/:ro
-      - ./mailagent.yml:/app/config.yml:ro
+      - ./mailagent.yml:/app/config.yml   # writable — daemon hot-reloads on API changes
       - ./mailagent-data/:/app/data/
+    depends_on:
+      mailserver:
+        condition: service_healthy
+    restart: unless-stopped
+
+  mailagent-api:
+    image: ghcr.io/vrag99/mailagent:latest
+    command: mailagent serve -c /app/config.yml
+    env_file: ./mailagent.env
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./mailagent.yml:/app/config.yml
+      - ./mailagent-data/:/app/data/
+      - ./docker-data/dms/config/:/etc/dms/config/   # for mailbox provisioning
     depends_on:
       mailserver:
         condition: service_healthy
@@ -73,6 +89,8 @@ Commands:
   validate    Validate the config file and exit
   test        Dry-run a .eml file through the pipeline
   schema      Print the JSON Schema to stdout
+  serve       Start the REST API server
+  api-key     Manage API keys (create, list, revoke)
 
 Options:
   -c, --config PATH    Config file path (default: /app/config.yml)
@@ -83,6 +101,14 @@ Options:
 mailagent validate -c ./mailagent.yml
 mailagent test ./some-email.eml -c ./mailagent.yml
 mailagent schema > schema.json
+
+# Start the REST API server
+mailagent serve -c ./mailagent.yml --port 8000
+
+# Manage API keys
+mailagent api-key create --name myapp   # prints key once — save it
+mailagent api-key list                  # shows name + hash prefix
+mailagent api-key revoke <hash_prefix>  # use hash prefix from list
 ```
 
 ## Schema autocomplete

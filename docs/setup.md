@@ -57,6 +57,19 @@ docker compose up -d
 docker compose logs -f mailagent
 ```
 
+### 7. (Optional) Enable the REST API
+
+If you want to manage inboxes and send emails programmatically, start the API service and create an API key:
+
+```bash
+docker compose up -d mailagent-api
+
+# Create an API key
+docker compose exec mailagent-api mailagent api-key create --name myapp
+```
+
+See the [REST API reference](api.md) for the full endpoint list.
+
 ## Path B: Existing docker-mailserver
 
 Already running docker-mailserver? Add mailagent as a sidecar service.
@@ -73,17 +86,34 @@ Add the following service to your existing `docker-compose.yml`:
     volumes:
       # Mail data — read-only access to your existing maildir
       - ./docker-data/dms/mail-data/:/var/mail/:ro
-      # Config — your mailagent configuration file
-      - ./mailagent.yml:/app/config.yml:ro
+      # Config — writable so the API service can update it and the daemon hot-reloads
+      - ./mailagent.yml:/app/config.yml
       # State — persistent storage for processed-email tracking
       - ./mailagent-data/:/app/data/
     depends_on:
       mailserver:
         condition: service_healthy
     restart: unless-stopped
+
+  # Optional: REST API for inbox/workflow management
+  mailagent-api:
+    image: ghcr.io/vrag99/mailagent:latest
+    container_name: mailagent-api
+    command: mailagent serve -c /app/config.yml
+    env_file: ./mailagent.env
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./mailagent.yml:/app/config.yml
+      - ./mailagent-data/:/app/data/
+      - ./docker-data/dms/config/:/etc/dms/config/
+    depends_on:
+      mailserver:
+        condition: service_healthy
+    restart: unless-stopped
 ```
 
-> Adjust the mail-data volume path if your docker-mailserver stores mail elsewhere.
+> Adjust the mail-data and DMS config volume paths if your docker-mailserver stores files elsewhere.
 
 ### 2. Create mailagent.yml
 
@@ -113,9 +143,23 @@ docker compose up -d mailagent
 docker compose logs -f mailagent
 ```
 
+### 5. (Optional) Enable the REST API
+
+Start the API service and create an API key:
+
+```bash
+docker compose up -d mailagent-api
+
+# Create an API key
+docker compose exec mailagent-api mailagent api-key create --name myapp
+```
+
+See the [REST API reference](api.md) for the full endpoint list.
+
 ## Next steps
 
 - [Configuration reference](configuration.md) — full documentation of all config options
+- [REST API reference](api.md) — full API endpoint documentation
 - [Examples](../examples/) — sample configs for common setups
 - Run `mailagent validate -c ./mailagent.yml` to check your config
 - Run `mailagent test ./email.eml -c ./mailagent.yml` to dry-run an email through the pipeline

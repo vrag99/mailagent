@@ -57,6 +57,67 @@ def send_reply(
     return reply
 
 
+def send_email(
+    mail_host: str,
+    inbox_address: str,
+    password: str,
+    to: list[str],
+    subject: str,
+    body: str,
+    cc: list[str] | None = None,
+    bcc: list[str] | None = None,
+    content_type: str = "plain",
+    inbox_name: str | None = None,
+    in_reply_to: str | None = None,
+    references: str | None = None,
+) -> Message:
+    """Compose and send a fresh email (not necessarily a reply)."""
+    _, domain = inbox_address.split("@", 1)
+
+    from_header = f"{inbox_name} <{inbox_address}>" if inbox_name else inbox_address
+
+    msg = MIMEMultipart()
+    msg["From"] = from_header
+    msg["To"] = ", ".join(to)
+    if cc:
+        msg["Cc"] = ", ".join(cc)
+    msg["Subject"] = subject
+    msg["Date"] = email.utils.formatdate(localtime=True)
+    msg["Message-ID"] = email.utils.make_msgid(domain=domain)
+    if in_reply_to:
+        msg["In-Reply-To"] = in_reply_to
+    if references:
+        msg["References"] = references
+    msg.attach(MIMEText(body, content_type, "utf-8"))
+
+    all_recipients = list(to) + (cc or []) + (bcc or [])
+
+    with smtplib.SMTP(mail_host, SMTP_PORT) as smtp:
+        smtp.ehlo()
+        smtp.starttls()
+        smtp.ehlo()
+        smtp.login(inbox_address, password)
+        smtp.send_message(msg, to_addrs=all_recipients)
+
+    logger.debug("Sent email to %s from %s", to, inbox_address)
+    return msg
+
+
+def save_to_sent(
+    msg: Message,
+    mail_host: str,
+    inbox_address: str,
+    password: str,
+) -> None:
+    """Save a message to the Sent folder via IMAP."""
+    with IMAPClient(mail_host, port=IMAP_PORT, ssl=False) as client:
+        client.starttls()
+        client.login(inbox_address, password)
+        sent_folder = _get_or_create_sent(client)
+        client.append(sent_folder, msg.as_bytes(), flags=[b"\\Seen"])
+        logger.debug("Saved message to %s folder", sent_folder)
+
+
 def save_and_flag_replied(
     reply_msg: Message,
     original: ParsedEmail,

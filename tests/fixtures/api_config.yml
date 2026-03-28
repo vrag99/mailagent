@@ -1,0 +1,45 @@
+providers:
+  fast:
+    type: groq
+    model: llama-3.3-70b-versatile
+    api_key: fake-key-for-testing
+  smart:
+    type: openai
+    model: gpt-4
+    api_key: fake-key-for-testing
+
+defaults:
+  classify_provider: fast
+  reply_provider: smart
+  system_prompt: You are a helpful email assistant.
+  blocklist:
+    from_patterns:
+      - "noreply@"
+    headers:
+      - "List-Unsubscribe"
+
+inboxes:
+  - address: test@example.com
+    name: Test Inbox
+    credentials:
+      password: testpass
+    workflows:
+      - name: support
+        match:
+          intent: "support request"
+          keywords:
+            any: ["help", "issue", "bug"]
+        action:
+          type: reply
+          prompt: Help the user with their issue.
+
+      - name: fallback
+        match:
+          intent: default
+        action:
+          type: ignore
+
+settings:
+  data_dir: /tmp/mailagent-test
+  log_level: debug
+  mail_host: localhost
