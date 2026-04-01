@@ -50,6 +50,9 @@ services:
   mailagent:
     image: ghcr.io/vrag99/mailagent:latest
     container_name: mailagent
+    build:
+      context: ./services/core
+      dockerfile: ../../docker/Dockerfile.core
     command: ["run"]
     env_file: mailagent.env
     volumes:
@@ -64,6 +67,9 @@ services:
   mailagent-api:
     image: ghcr.io/vrag99/mailagent:latest
     container_name: mailagent-api
+    build:
+      context: ./services/core
+      dockerfile: ../../docker/Dockerfile.core
     command: ["serve", "--host", "0.0.0.0", "--port", "8000", "--dms-config", "/app/dms-config"]
     env_file: mailagent.env
     volumes:
@@ -79,8 +85,8 @@ services:
     image: ghcr.io/vrag99/mailagent-web:latest
     container_name: mailagent-web
     build:
-      context: ./web
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: docker/Dockerfile.ui
     environment:
       - NEXT_PUBLIC_API_URL=/api
     depends_on:

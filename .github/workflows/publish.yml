@@ -18,7 +18,9 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -e ".[dev]"
+        working-directory: services/core
       - run: pytest -q
+        working-directory: services/core
 
   publish:
     needs: test
@@ -48,7 +50,8 @@ jobs:
 
       - uses: docker/build-push-action@v6
         with:
-          context: .
+          context: services/core
+          file: docker/Dockerfile.core
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -67,4 +70,7 @@ jobs:
           python-version: "3.12"
       - run: pip install build
       - run: python -m build
+        working-directory: services/core
       - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: services/core/dist

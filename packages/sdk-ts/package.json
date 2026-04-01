@@ -1,0 +1,21 @@
+{
+  "name": "@mailagent/sdk",
+  "version": "0.0.1",
+  "type": "module",
+  "private": true,
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./client": "./src/client.gen.ts",
+    "./types": "./src/types.gen.ts"
+  },
+  "scripts": {
+    "generate": "openapi-ts -i ./openapi.json -o ./src -c @hey-api/client-fetch -p @hey-api/sdk"
+  },
+  "dependencies": {
+    "@hey-api/client-fetch": "^0.13.1"
+  },
+  "devDependencies": {
+    "@hey-api/openapi-ts": "^0.94.5"
+  }
+}
