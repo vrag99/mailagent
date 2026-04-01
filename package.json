@@ -1,0 +1,9 @@
+{
+  "private": true,
+  "scripts": {
+    "generate": "make generate",
+    "dev:ui": "make dev-ui",
+    "test": "make test",
+    "lint": "make lint"
+  }
+}

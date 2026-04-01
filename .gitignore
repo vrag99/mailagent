@@ -3,3 +3,8 @@ docker-data/
 .venv/
 __pycache__/
 *.egg-info/
+
+# Web UI
+node_modules/*
+web/.next/
+web/.env.local
